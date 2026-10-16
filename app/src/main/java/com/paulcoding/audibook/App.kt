@@ -1,7 +1,8 @@
 package com.paulcoding.audibook
 
 import android.app.Application
-import com.paulcoding.audibook.core.domain.repositoryModule
+import com.paulcoding.audibook.core.di.dataModule
+import com.paulcoding.audibook.core.di.ttsModule
 import com.paulcoding.audibook.core.network.di.networkModule
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.GlobalContext
@@ -15,7 +16,8 @@ class App : Application() {
             modules(
                 listOf(
                     networkModule,
-                    repositoryModule,
+                    dataModule,
+                    ttsModule,
                     viewModelModule,
                 )
             )

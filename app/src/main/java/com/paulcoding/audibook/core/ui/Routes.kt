@@ -6,5 +6,17 @@ import kotlinx.serialization.Serializable
 object Routes {
     @Serializable
     @Immutable
-    object Home
+    object Library
+
+    @Serializable
+    @Immutable
+    data class Reader(val bookId: String)
+
+    @Serializable
+    @Immutable
+    object Settings
+
+    @Serializable
+    @Immutable
+    object Models
 }
