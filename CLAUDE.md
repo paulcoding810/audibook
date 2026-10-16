@@ -1,0 +1,49 @@
+# AudiBook
+
+Android app that imports EPUBs and reads them aloud with Google TTS or on-device neural voices (sherpa-onnx), highlighting the sentence being spoken.
+
+## Build & test
+
+```sh
+./gradlew :app:testDebugUnitTest      # JVM unit tests (parser, splitter, WAV decoder)
+./gradlew :app:assembleDebug
+./gradlew :app:installDebug
+```
+
+- AGP 9 with built-in Kotlin (no `kotlin-android` plugin). Compiled classes land in `app/build/intermediates/built_in_kotlinc/`, not `tmp/kotlin-classes`.
+- Room uses KSP. Dependency versions live in `gradle/libs.versions.toml`.
+- sherpa-onnx comes from JitPack (`com.github.k2-fsa.sherpa-onnx:sherpa-onnx`, AAR). The JitPack repo in `settings.gradle.kts` is restricted to that group.
+- The debug APK is ~117 MB, mostly sherpa-onnx native libs for 3 ABIs (`abiFilters` in `app/build.gradle.kts`).
+
+## Architecture
+
+Single `app` module, Compose + Koin + Media3. Package `com.paulcoding.audibook`:
+
+- `core/epub`: dependency-free EPUB parsing (`ZipFile` + Jsoup) into chapters → paragraphs → sentences. `SentenceSplitter` uses `java.text.BreakIterator`, not ICU, so it runs in JVM unit tests. Sentences are capped at 300 chars.
+- `core/data`: Room `books` table (reading progress is stored as columns on it), DataStore `TtsSettings`, and `BookRepository` (import, parser + chapter LRU cache).
+- `core/tts`: the `SpeechEngine` interface. Both engines render PCM ahead and play it through `playPipelined()` in `PcmPipeline.kt`.
+  - `SystemTtsEngine`: Google TTS via `synthesizeToFile()`, then `WavReader`.
+  - `SherpaTtsEngine`: sherpa-onnx `OfflineTts` on a single dedicated thread.
+  - `ModelManager`: model catalog, download, and tar.bz2 extraction.
+- `core/playback`:
+  - `ReadAloudController`: the single source of truth for what's being read. Main-thread only.
+  - `TtsPlayer`: a Media3 `SimpleBasePlayer` adapter.
+  - `PlaybackService`: the `MediaSessionService`.
+  - `AudioFocus`: audio focus and headphone-unplug ("becoming noisy") handling.
+- `feature/{library,reader,settings}`: screens + ViewModels. Routes are typed in `core/ui/Routes.kt`; DI lives in `core/di/AppModule.kt` and `ViewModelModule.kt`.
+
+## Non-obvious decisions (don't undo without reason)
+
+- **Never use `TextToSpeech.speak()` for playback.** The framework only synthesizes ~500 ms ahead, which caused multi-second gaps between sentences on a Snapdragon 665 device. Pre-render with `synthesizeToFile()` and play the PCM yourself.
+- **Audio must play from this app's process.** Android picks the media-button session by which UID is producing audio. If the TTS engine's process plays the audio, headset and media keys don't reach the app.
+- **Automatic voice choice** prefers installed offline voices and ranks Google's `legacySetLanguageVoice` voices (e.g. `vi-VN-language`) last: they go network-first even though they report `isNetworkConnectionRequired = false`. If a network voice fails, the app falls back to an offline voice once; if none exists, it shows an actionable error.
+- The manifest needs `<queries>` for `android.intent.action.TTS_SERVICE` (API 30+ package visibility).
+- `ReadAloudController` guards against cancelled playback jobs changing state (`playJob !== self`). Keep that when touching play/seek/restart logic.
+- Pause stops synthesis. Resume restarts from the current sentence.
+
+## Device testing notes
+
+- vivo devices block `logcat` for apps entirely. To measure timing there, write to a file in `filesDir` and read it with `adb shell run-as com.paulcoding.audibook cat files/<name>`.
+- Inspect app state with `adb shell run-as com.paulcoding.audibook sqlite3 databases/audibook.db 'select title,chapterIndex,sentenceIndex from books'`.
+- Galaxy Fold devices have multiple displays, so `screencap` fails; use `uiautomator dump` instead.
+- In zsh, `ADB="adb -s X"; $ADB ...` does not word-split. Use a wrapper script or call `adb -s X` directly.
