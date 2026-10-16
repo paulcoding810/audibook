@@ -1,17 +1,21 @@
 package com.paulcoding.audibook.core.tts
 
 import android.content.Context
-import android.media.AudioAttributes
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.util.Log
 import com.paulcoding.audibook.core.data.TtsSettings
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 data class SystemVoice(
     val name: String,
@@ -20,18 +24,18 @@ data class SystemVoice(
     val quality: Int,
 )
 
+/**
+ * Renders sentences ahead with [TextToSpeech.synthesizeToFile] and plays them itself, because the
+ * framework's speak() queue only synthesizes ~500 ms ahead and leaves gaps on slower devices.
+ */
 class SystemTtsEngine(private val context: Context) : SpeechEngine {
     private var tts: TextToSpeech? = null
-    private var counter = 0L
-    private val silence = SilentAudio()
     private val initMutex = Mutex()
+    private val counter = AtomicLong()
+    private val pending = ConcurrentHashMap<String, CompletableDeferred<Int>>()
+    private val cacheDir get() = File(context.cacheDir, "tts").apply { mkdirs() }
 
-    private sealed interface Event {
-        val id: String
-        data class Started(override val id: String) : Event
-        data class Finished(override val id: String) : Event
-        data class Failed(override val id: String, val code: Int) : Event
-    }
+    private class VoiceFailure(val code: Int) : Exception()
 
     suspend fun voices(): List<SystemVoice> = engine().voices.orEmpty()
         .filter { TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features }
@@ -47,15 +51,14 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
     ) {
         val tts = engine()
         applySettings(tts, settings, language)
-        var from = first
         var usedFallback = false
-        try {
-            silence.start()
+
+        suspend fun render(text: String): PcmAudio {
             while (true) {
                 try {
-                    speakFrom(tts, from, next, onStart)
-                    return
+                    return synthesize(tts, text)
                 } catch (failure: VoiceFailure) {
+                    if (failure.code in skippableErrors) return PcmAudio(FloatArray(0), 0)
                     val current = tts.voice
                     val offline = current?.let { bestVoice(tts, it.locale, offlineOnly = true) }
                     val fallback = offline?.takeIf { !usedFallback && it.name != current.name }
@@ -63,77 +66,34 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
                     Log.w(TAG, "Voice ${current.name} failed (${failure.code}), falling back to ${fallback.name}")
                     tts.voice = fallback
                     usedFallback = true
-                    from = failure.utterance
                 }
-            }
-        } finally {
-            silence.stop()
-        }
-    }
-
-    private class VoiceFailure(val utterance: Utterance, val code: Int) : Exception()
-
-    private suspend fun speakFrom(
-        tts: TextToSpeech,
-        first: Utterance,
-        next: suspend (Utterance) -> Utterance?,
-        onStart: (Utterance) -> Unit,
-    ) {
-        val events = Channel<Event>(Channel.UNLIMITED)
-        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String) {
-                events.trySend(Event.Started(utteranceId))
-            }
-
-            override fun onDone(utteranceId: String) {
-                events.trySend(Event.Finished(utteranceId))
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String) {
-                events.trySend(Event.Failed(utteranceId, TextToSpeech.ERROR))
-            }
-
-            override fun onError(utteranceId: String, errorCode: Int) {
-                events.trySend(Event.Failed(utteranceId, errorCode))
-            }
-        })
-
-        val queue = ArrayDeque<Pair<String, Utterance>>()
-        var tail: Utterance? = first
-
-        fun enqueue(utterance: Utterance) {
-            val id = "u${counter++}"
-            val result = tts.speak(utterance.text, TextToSpeech.QUEUE_ADD, null, id)
-            if (result != TextToSpeech.SUCCESS) throw TtsException("Text-to-speech failed to queue text")
-            queue.addLast(id to utterance)
-        }
-
-        suspend fun fill() {
-            while (queue.size < LOOKAHEAD) {
-                val utterance = tail ?: return
-                enqueue(utterance)
-                tail = next(utterance)
             }
         }
 
         try {
-            fill()
-            while (queue.isNotEmpty()) {
-                val event = events.receive()
-                val index = queue.indexOfFirst { it.first == event.id }
-                if (index < 0) continue
-                when (event) {
-                    is Event.Started -> onStart(queue[index].second)
-                    is Event.Finished -> {
-                        repeat(index + 1) { queue.removeFirst() }
-                        fill()
-                    }
-                    is Event.Failed -> throw VoiceFailure(queue[index].second, event.code)
-                }
-            }
+            playPipelined(first, next, onStart, BUFFERED_SENTENCES, Dispatchers.Main.immediate) { render(it.text) }
         } finally {
             tts.stop()
+            pending.values.forEach { it.cancel() }
+            pending.clear()
+        }
+    }
+
+    private suspend fun synthesize(tts: TextToSpeech, text: String): PcmAudio {
+        val id = "s${counter.getAndIncrement()}"
+        val file = File(cacheDir, "$id.wav")
+        val result = CompletableDeferred<Int>()
+        pending[id] = result
+        try {
+            if (tts.synthesizeToFile(text, Bundle(), file, id) != TextToSpeech.SUCCESS) {
+                throw TtsException("Text-to-speech failed to queue text")
+            }
+            val code = result.await()
+            if (code != TextToSpeech.SUCCESS) throw VoiceFailure(code)
+            return withContext(Dispatchers.IO) { WavReader.decode(file.readBytes()) }
+        } finally {
+            pending.remove(id)
+            file.delete()
         }
     }
 
@@ -153,7 +113,7 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
         }
     }
 
-    /** Installed voice for [locale], preferring offline voices, the same country, then higher quality. */
+    /** Installed voice for [locale]: offline first, then concrete (non network-first "language") voices, same country, quality. */
     private fun bestVoice(tts: TextToSpeech, locale: Locale, offlineOnly: Boolean): Voice? =
         tts.voices.orEmpty()
             .filter { it.locale.language == locale.language && TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features }
@@ -161,6 +121,7 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
             .sortedWith(
                 compareBy<Voice>(
                     { it.isNetworkConnectionRequired },
+                    { LEGACY_LANGUAGE_VOICE in it.features },
                     { locale.country.isNotEmpty() && it.locale.country != locale.country },
                     { -it.quality },
                 )
@@ -180,12 +141,22 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
             created.shutdown()
             throw TtsException("No text-to-speech engine available")
         }
-        created.setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-        )
+        created.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String) = Unit
+
+            override fun onDone(utteranceId: String) {
+                pending[utteranceId]?.complete(TextToSpeech.SUCCESS)
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String) {
+                pending[utteranceId]?.complete(TextToSpeech.ERROR)
+            }
+
+            override fun onError(utteranceId: String, errorCode: Int) {
+                pending[utteranceId]?.complete(errorCode)
+            }
+        })
         return created
     }
 
@@ -197,15 +168,16 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
                     "Download it in Voice settings → Install more voices, or use an on-device AI voice."
             code in networkErrors -> "The online $language voice couldn't connect"
             code == TextToSpeech.ERROR_NOT_INSTALLED_YET -> "Voice data for $language is not installed yet"
-            code == TextToSpeech.ERROR_SYNTHESIS -> "Speech synthesis failed"
             else -> "Text-to-speech error ($code)"
         }
     }
 
     private companion object {
-        const val LOOKAHEAD = 3
+        const val BUFFERED_SENTENCES = 4
         const val GOOGLE_TTS = "com.google.android.tts"
         const val TAG = "SystemTtsEngine"
+        const val LEGACY_LANGUAGE_VOICE = "legacySetLanguageVoice"
         val networkErrors = setOf(TextToSpeech.ERROR_NETWORK, TextToSpeech.ERROR_NETWORK_TIMEOUT, TextToSpeech.ERROR_SERVICE)
+        val skippableErrors = setOf(TextToSpeech.ERROR_SYNTHESIS, TextToSpeech.ERROR_INVALID_REQUEST)
     }
 }

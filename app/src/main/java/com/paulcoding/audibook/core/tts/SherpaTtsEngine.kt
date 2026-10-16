@@ -1,8 +1,5 @@
 package com.paulcoding.audibook.core.tts
 
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKittenModelConfig
@@ -10,22 +7,13 @@ import com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import com.paulcoding.audibook.core.data.TtsSettings
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
-import kotlinx.coroutines.asCoroutineDispatcher
 
 class SherpaTtsEngine(private val models: ModelManager) : SpeechEngine {
     private val synthDispatcher = Executors.newSingleThreadExecutor { Thread(it, "sherpa-tts") }.asCoroutineDispatcher()
     private var loaded: Pair<String, OfflineTts>? = null
-
-    private class Chunk(val utterance: Utterance, val samples: FloatArray)
 
     override suspend fun speak(
         first: Utterance,
@@ -33,66 +21,14 @@ class SherpaTtsEngine(private val models: ModelManager) : SpeechEngine {
         language: String?,
         next: suspend (Utterance) -> Utterance?,
         onStart: (Utterance) -> Unit,
-    ) = coroutineScope {
+    ) {
         val modelId = settings.sherpaModelId ?: throw TtsException("Choose an on-device voice in Settings")
         val tts = withContext(synthDispatcher) { load(modelId) }
         val speaker = settings.sherpaSpeaker.coerceIn(0, (tts.numSpeakers() - 1).coerceAtLeast(0))
-        val sampleRate = tts.sampleRate()
-
-        val chunks = Channel<Chunk>(capacity = BUFFERED_SENTENCES)
-        launch(synthDispatcher) {
-            var utterance: Utterance? = first
-            while (utterance != null) {
-                ensureActive()
-                val audio = tts.generate(utterance.text, speaker, settings.speed)
-                chunks.send(Chunk(utterance, audio.samples))
-                utterance = next(utterance)
-            }
-            chunks.close()
+        playPipelined(first, next, onStart, BUFFERED_SENTENCES, synthDispatcher) { utterance ->
+            val audio = tts.generate(utterance.text, speaker, settings.speed)
+            PcmAudio(audio.samples, audio.sampleRate)
         }
-
-        val track = createTrack(sampleRate)
-        var framesWritten = 0L
-        try {
-            track.play()
-            for (chunk in chunks) {
-                onStart(chunk.utterance)
-                withContext(Dispatchers.IO) {
-                    var offset = 0
-                    while (offset < chunk.samples.size && isActive) {
-                        val written = track.write(chunk.samples, offset, chunk.samples.size - offset, AudioTrack.WRITE_BLOCKING)
-                        if (written < 0) throw TtsException("Audio output error ($written)")
-                        offset += written
-                    }
-                    framesWritten += offset
-                }
-            }
-            while (track.playbackHeadPosition.toLong() and 0xFFFFFFFFL < framesWritten) delay(50)
-        } finally {
-            track.pause()
-            track.flush()
-            track.release()
-        }
-    }
-
-    private fun createTrack(sampleRate: Int): AudioTrack {
-        val format = AudioFormat.Builder()
-            .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
-            .setSampleRate(sampleRate)
-            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-            .build()
-        val minBuffer = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
-        return AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
-            .setAudioFormat(format)
-            .setBufferSizeInBytes(minBuffer * 2)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
     }
 
     private fun load(modelId: String): OfflineTts {
