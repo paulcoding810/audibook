@@ -4,6 +4,8 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
+import android.util.Log
 import com.paulcoding.audibook.core.data.TtsSettings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
@@ -45,7 +47,38 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
     ) {
         val tts = engine()
         applySettings(tts, settings, language)
+        var from = first
+        var usedFallback = false
+        try {
+            silence.start()
+            while (true) {
+                try {
+                    speakFrom(tts, from, next, onStart)
+                    return
+                } catch (failure: VoiceFailure) {
+                    val current = tts.voice
+                    val offline = current?.let { bestVoice(tts, it.locale, offlineOnly = true) }
+                    val fallback = offline?.takeIf { !usedFallback && it.name != current.name }
+                        ?: throw TtsException(errorMessage(failure.code, current, hasOfflineVoice = offline != null))
+                    Log.w(TAG, "Voice ${current.name} failed (${failure.code}), falling back to ${fallback.name}")
+                    tts.voice = fallback
+                    usedFallback = true
+                    from = failure.utterance
+                }
+            }
+        } finally {
+            silence.stop()
+        }
+    }
 
+    private class VoiceFailure(val utterance: Utterance, val code: Int) : Exception()
+
+    private suspend fun speakFrom(
+        tts: TextToSpeech,
+        first: Utterance,
+        next: suspend (Utterance) -> Utterance?,
+        onStart: (Utterance) -> Unit,
+    ) {
         val events = Channel<Event>(Channel.UNLIMITED)
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String) {
@@ -85,7 +118,6 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
         }
 
         try {
-            silence.start()
             fill()
             while (queue.isNotEmpty()) {
                 val event = events.receive()
@@ -97,21 +129,22 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
                         repeat(index + 1) { queue.removeFirst() }
                         fill()
                     }
-                    is Event.Failed -> throw TtsException(errorMessage(event.code))
+                    is Event.Failed -> throw VoiceFailure(queue[index].second, event.code)
                 }
             }
         } finally {
             tts.stop()
-            silence.stop()
         }
     }
 
     private fun applySettings(tts: TextToSpeech, settings: TtsSettings, language: String?) {
         tts.setSpeechRate(settings.speed)
         tts.setPitch(settings.pitch)
-        val voice = settings.systemVoice?.let { name -> tts.voices?.firstOrNull { it.name == name } }
+        val chosen = settings.systemVoice?.let { name -> tts.voices?.firstOrNull { it.name == name } }
+        val automatic = language?.let { bestVoice(tts, Locale.forLanguageTag(it), offlineOnly = false) }
         when {
-            voice != null -> tts.voice = voice
+            chosen != null -> tts.voice = chosen
+            automatic != null -> tts.voice = automatic
             language != null -> {
                 val locale = Locale.forLanguageTag(language)
                 if (tts.isLanguageAvailable(locale) >= TextToSpeech.LANG_AVAILABLE) tts.language = locale
@@ -119,6 +152,20 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
             else -> tts.voice = tts.defaultVoice
         }
     }
+
+    /** Installed voice for [locale], preferring offline voices, the same country, then higher quality. */
+    private fun bestVoice(tts: TextToSpeech, locale: Locale, offlineOnly: Boolean): Voice? =
+        tts.voices.orEmpty()
+            .filter { it.locale.language == locale.language && TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features }
+            .filter { !offlineOnly || !it.isNetworkConnectionRequired }
+            .sortedWith(
+                compareBy<Voice>(
+                    { it.isNetworkConnectionRequired },
+                    { locale.country.isNotEmpty() && it.locale.country != locale.country },
+                    { -it.quality },
+                )
+            )
+            .firstOrNull()
 
     private suspend fun engine(): TextToSpeech = initMutex.withLock {
         tts ?: create().also { tts = it }
@@ -142,15 +189,23 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
         return created
     }
 
-    private fun errorMessage(code: Int) = when (code) {
-        TextToSpeech.ERROR_NETWORK, TextToSpeech.ERROR_NETWORK_TIMEOUT -> "Voice needs a network connection"
-        TextToSpeech.ERROR_NOT_INSTALLED_YET -> "Voice data is not installed yet"
-        TextToSpeech.ERROR_SYNTHESIS -> "Speech synthesis failed"
-        else -> "Text-to-speech error ($code)"
+    private fun errorMessage(code: Int, voice: Voice?, hasOfflineVoice: Boolean): String {
+        val language = voice?.locale?.displayLanguage ?: "this language"
+        return when {
+            code in networkErrors && !hasOfflineVoice ->
+                "Couldn't reach Google's online $language voice, and no offline $language voice is downloaded. " +
+                    "Download it in Voice settings → Install more voices, or use an on-device AI voice."
+            code in networkErrors -> "The online $language voice couldn't connect"
+            code == TextToSpeech.ERROR_NOT_INSTALLED_YET -> "Voice data for $language is not installed yet"
+            code == TextToSpeech.ERROR_SYNTHESIS -> "Speech synthesis failed"
+            else -> "Text-to-speech error ($code)"
+        }
     }
 
     private companion object {
         const val LOOKAHEAD = 3
         const val GOOGLE_TTS = "com.google.android.tts"
+        const val TAG = "SystemTtsEngine"
+        val networkErrors = setOf(TextToSpeech.ERROR_NETWORK, TextToSpeech.ERROR_NETWORK_TIMEOUT, TextToSpeech.ERROR_SERVICE)
     }
 }
