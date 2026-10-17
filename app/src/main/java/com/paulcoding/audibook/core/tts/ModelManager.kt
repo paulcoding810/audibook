@@ -24,6 +24,9 @@ import kotlin.coroutines.coroutineContext
 
 enum class ModelType { VITS, KOKORO, KITTEN }
 
+/** How demanding a voice is to synthesize: light voices keep up on any phone, heavy ones need a fast CPU and more battery. */
+enum class VoiceWeight { LIGHT, HEAVY }
+
 data class TtsModel(
     val id: String,
     val name: String,
@@ -31,6 +34,7 @@ data class TtsModel(
     val sizeMb: Int,
     val type: ModelType,
     val speakers: Int = 1,
+    val weight: VoiceWeight = if (type == ModelType.KOKORO) VoiceWeight.HEAVY else VoiceWeight.LIGHT,
 ) {
     val url get() = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/$id.tar.bz2"
 }

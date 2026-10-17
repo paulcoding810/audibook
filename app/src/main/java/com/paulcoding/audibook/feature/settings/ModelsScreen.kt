@@ -51,7 +51,8 @@ fun ModelsScreen(onBack: () -> Unit, viewModel: ModelsViewModel = koinViewModel(
         LazyColumn(Modifier.padding(padding)) {
             item {
                 Text(
-                    "Models run entirely on this device with sherpa-onnx. Downloads come from the sherpa-onnx GitHub releases.",
+                    "Models run entirely on this device with sherpa-onnx. Light voices keep up on any phone; " +
+                        "heavy voices sound more natural but need a fast phone and use more battery.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
@@ -60,7 +61,12 @@ fun ModelsScreen(onBack: () -> Unit, viewModel: ModelsViewModel = koinViewModel(
             items(viewModel.catalog, key = { it.id }) { model ->
                 val state = states[model.id] ?: ModelState.NotInstalled
                 ListItem(
-                    headlineContent = { Text(model.name) },
+                    headlineContent = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(model.name, modifier = Modifier.weight(1f, fill = false))
+                            VoiceWeightBadge(model.weight, Modifier.padding(start = 8.dp))
+                        }
+                    },
                     supportingContent = {
                         Text(
                             when (state) {

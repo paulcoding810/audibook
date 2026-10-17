@@ -179,6 +179,7 @@ private fun SherpaSection(
             title = model.name,
             description = "${model.language} · ${model.sizeMb} MB",
             onClick = { viewModel.setModel(model.id) },
+            badge = { VoiceWeightBadge(model.weight) },
         )
     }
     OutlinedButton(onClick = onOpenModels, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -253,9 +254,20 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun EngineOption(selected: Boolean, title: String, description: String, onClick: () -> Unit) {
+private fun EngineOption(
+    selected: Boolean,
+    title: String,
+    description: String,
+    onClick: () -> Unit,
+    badge: (@Composable () -> Unit)? = null,
+) {
     ListItem(
-        headlineContent = { Text(title) },
+        headlineContent = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(title, modifier = Modifier.weight(1f, fill = false))
+                badge?.invoke()
+            }
+        },
         supportingContent = { Text(description) },
         leadingContent = { RadioButton(selected = selected, onClick = null) },
         modifier = Modifier.clickable(onClick = onClick),
