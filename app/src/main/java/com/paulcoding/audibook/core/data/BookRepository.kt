@@ -29,6 +29,8 @@ class BookRepository(
 
     suspend fun getBook(id: String): BookEntity? = dao.get(id)
 
+    suspend fun lastReadBookId(): String? = dao.lastReadId()
+
     suspend fun import(uri: Uri): BookEntity = withContext(Dispatchers.IO) {
         val id = UUID.randomUUID().toString()
         val file = File(booksDir, "$id.epub")

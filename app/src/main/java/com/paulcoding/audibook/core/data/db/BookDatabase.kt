@@ -34,6 +34,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id")
     suspend fun get(id: String): BookEntity?
 
+    @Query("SELECT id FROM books WHERE lastReadAt IS NOT NULL ORDER BY lastReadAt DESC LIMIT 1")
+    suspend fun lastReadId(): String?
+
     @Insert
     suspend fun insert(book: BookEntity)
 
