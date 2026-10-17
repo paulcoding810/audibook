@@ -1,0 +1,71 @@
+name: Publish to Play Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Play Store track"
+        required: true
+        default: "internal"
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    env:
+      JAVA_VERSION: '21'
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Restore signing files
+        run: |
+          if [ -z "$KEY_PROPERTIES" ] || [ -z "$RELEASE_KEYSTORE_BASE64" ] || [ -z "$PLAY_STORE_JSON_KEY" ]; then
+            echo "::error::Set the KEY_PROPERTIES, RELEASE_KEYSTORE_BASE64 and PLAY_STORE_JSON_KEY repository secrets"
+            exit 1
+          fi
+          echo "$KEY_PROPERTIES" > key.properties
+          chmod 600 key.properties
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
+          echo "$PLAY_STORE_JSON_KEY" > play-store-key.json
+        env:
+          KEY_PROPERTIES: ${{ secrets.KEY_PROPERTIES }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Release AAB
+        run: ./gradlew bundleRelease
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release.aab
+          path: app/build/outputs/bundle/release/*.aab
+
+      - name: Upload to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: play-store-key.json
+          packageName: com.paulcoding.audibook
+          releaseFiles: app/build/outputs/bundle/release/*.aab
+          track: ${{ github.event.inputs.track }}
+          status: draft

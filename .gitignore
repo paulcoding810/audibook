@@ -9,3 +9,7 @@
 .cxx
 local.properties
 /.firebender
+/key.properties
+*.keystore
+*.jks
+/play-store-key.json

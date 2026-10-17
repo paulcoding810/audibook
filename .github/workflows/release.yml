@@ -1,0 +1,74 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      JAVA_VERSION: '21'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Restore signing files
+        run: |
+          if [ -z "$KEY_PROPERTIES" ] || [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "::error::Set the KEY_PROPERTIES and RELEASE_KEYSTORE_BASE64 repository secrets"
+            exit 1
+          fi
+          echo "$KEY_PROPERTIES" > key.properties
+          chmod 600 key.properties
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
+        env:
+          KEY_PROPERTIES: ${{ secrets.KEY_PROPERTIES }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run tests
+        run: ./gradlew testReleaseUnitTest
+
+      - name: Build app
+        run: ./gradlew assembleRelease
+
+      - name: Rename apks
+        run: |
+          cd app/build/outputs/apk/release
+          for apk in app-*-release.apk; do
+            abi=${apk#app-}; abi=${abi%-release.apk}
+            mv "$apk" "AudiBook-${GITHUB_REF_NAME}-${abi}.apk"
+          done
+
+      - name: Create changelog
+        id: changelog
+        uses: requarks/changelog-action@v1
+        with:
+          includeInvalidCommits: true
+          token: ${{ github.token }}
+          tag: ${{ github.ref_name }}
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          body: ${{ steps.changelog.outputs.changes }}
+          files: app/build/outputs/apk/release/*.apk
+          fail_on_unmatched_files: true
+          make_latest: true

@@ -13,7 +13,14 @@ Android app that imports EPUBs and reads them aloud with Google TTS or on-device
 - AGP 9 with built-in Kotlin (no `kotlin-android` plugin). Compiled classes land in `app/build/intermediates/built_in_kotlinc/`, not `tmp/kotlin-classes`.
 - Room uses KSP. Dependency versions live in `gradle/libs.versions.toml`.
 - sherpa-onnx comes from JitPack (`com.github.k2-fsa.sherpa-onnx:sherpa-onnx`, AAR). The JitPack repo in `settings.gradle.kts` is restricted to that group.
-- The debug APK is ~117 MB, mostly sherpa-onnx native libs for 3 ABIs (`abiFilters` in `app/build.gradle.kts`).
+- ABI splits produce one APK per ABI (~40–55 MB release, mostly sherpa-onnx native libs) plus a universal APK (~140 MB). Install the matching one, e.g. `app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`.
+- Release signing reads `key.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) from the repo root; without it, release APKs are unsigned. Never commit `key.properties` or keystores.
+
+## CI/CD (`.github/workflows`)
+
+- `dev.yml`: on push/PR to `main`, runs unit tests and uploads the universal debug APK.
+- `release.yml`: on a `v*.*` tag, builds signed per-ABI APKs and creates a draft GitHub release. Needs the repo secrets `KEY_PROPERTIES` (file contents, with `storeFile=release.keystore`) and `RELEASE_KEYSTORE_BASE64` (`base64 -i release.keystore`).
+- `publish-playstore.yml`: manual run; builds the release AAB and uploads it as a draft to the chosen Play track (internal/alpha/beta/production). Also needs `PLAY_STORE_JSON_KEY` (service account JSON). Bump `versionCode` in `app/build.gradle.kts` before each upload; Play rejects reused codes.
 
 ## Architecture
 
