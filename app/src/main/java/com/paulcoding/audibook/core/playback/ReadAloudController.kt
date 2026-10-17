@@ -63,6 +63,7 @@ class ReadAloudController(
 
     private var playJob: Job? = null
     private var previewJob: Job? = null
+    private var audioJob: Job? = null
     private var sleepJob: Job? = null
 
     private val focus = AudioFocus(
@@ -174,8 +175,7 @@ class ReadAloudController(
 
     fun preview(text: String, language: String?) {
         pause()
-        previewJob?.cancel()
-        previewJob = scope.launch {
+        previewJob = launchAudio {
             try {
                 val current = settings.settings.first()
                 engineFor(current).speak(Utterance(-1, -1, text), current, language, { null }) {}
@@ -201,7 +201,17 @@ class ReadAloudController(
         _state.update { it.copy(isPlaying = false, isBuffering = false) }
     }
 
-    private fun startSpeaking(book: BookEntity, from: Position): Job = scope.launch {
+    /** Starts audio output only once the previous audio job has fully stopped, so samples and playback never overlap. */
+    private fun launchAudio(block: suspend CoroutineScope.() -> Unit): Job {
+        val previous = audioJob
+        previous?.cancel()
+        return scope.launch {
+            previous?.join()
+            block()
+        }.also { audioJob = it }
+    }
+
+    private fun startSpeaking(book: BookEntity, from: Position): Job = launchAudio {
         val self = coroutineContext.job
         try {
             val first = utteranceAt(book, from)
@@ -216,7 +226,7 @@ class ReadAloudController(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (playJob !== self) return@launch
+            if (playJob !== self) return@launchAudio
             _errors.tryEmit(e.message ?: "Playback failed")
             onFinished(self)
         }

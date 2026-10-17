@@ -55,7 +55,8 @@ suspend fun playPipelined(
             withContext(Dispatchers.IO) {
                 var offset = 0
                 while (offset < audio.samples.size && isActive) {
-                    val written = output.write(audio.samples, offset, audio.samples.size - offset, AudioTrack.WRITE_BLOCKING)
+                    val size = minOf(audio.samples.size - offset, audio.sampleRate / WRITES_PER_SECOND)
+                    val written = output.write(audio.samples, offset, size, AudioTrack.WRITE_BLOCKING)
                     if (written < 0) throw TtsException("Audio output error ($written)")
                     offset += written
                 }
@@ -71,6 +72,9 @@ suspend fun playPipelined(
         }
     }
 }
+
+/** Small writes keep cancellation responsive: a blocking write only returns once its data is buffered. */
+private const val WRITES_PER_SECOND = 20
 
 private suspend fun drain(track: AudioTrack, framesWritten: Long) {
     while (track.playbackHeadPosition.toLong() and 0xFFFFFFFFL < framesWritten) delay(20)
