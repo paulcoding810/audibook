@@ -31,22 +31,24 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,7 +58,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -95,14 +96,17 @@ fun ReaderScreen(
     var showToc by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
     val ready = state.book?.id == bookId
+    val topBarScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     LaunchedEffect(Unit) {
         viewModel.errors.collect { snackbar.showSnackbar(it) }
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(topBarScroll.nestedScrollConnection),
         topBar = {
             TopAppBar(
+                scrollBehavior = topBarScroll,
                 title = {
                     Column {
                         Text(state.book?.title.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -129,7 +133,7 @@ fun ReaderScreen(
                             Icon(
                                 Icons.Default.Bedtime,
                                 contentDescription = "Sleep timer",
-                                tint = if (state.sleepTimerEndsAt != null) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                                tint = if (state.sleepTimerEndsAt != null) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                             )
                         }
                         DropdownMenu(expanded = showSleep, onDismissRequest = { showSleep = false }) {
@@ -231,10 +235,17 @@ private fun ChapterText(
         if (follow && currentParagraph >= 0) listState.revealParagraph(currentParagraph)
     }
 
+    val showJump = !follow && currentParagraph >= 0
+
     Box(modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 8.dp,
+                bottom = if (showJump) 80.dp else 16.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize().nestedScroll(userScroll),
         ) {
@@ -251,13 +262,13 @@ private fun ChapterText(
                 }
             }
         }
-        if (!follow && currentParagraph >= 0) {
-            ExtendedFloatingActionButton(
+        if (showJump) {
+            SmallFloatingActionButton(
                 onClick = { follow = true },
-                icon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
-                text = { Text("Current sentence") },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-            )
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            ) {
+                Icon(Icons.Default.MyLocation, contentDescription = "Go to current sentence")
+            }
         }
     }
 }
@@ -330,7 +341,7 @@ private fun PlayerControls(
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -347,7 +358,7 @@ private fun PlayerControls(
                 }
                 IconButton(onClick = onPreviousChapter) { Icon(Icons.Default.SkipPrevious, contentDescription = "Previous chapter") }
                 IconButton(onClick = onPreviousSentence) { Icon(Icons.Default.FastRewind, contentDescription = "Previous sentence") }
-                FilledIconButton(onClick = onToggle, modifier = Modifier.size(56.dp)) {
+                FilledIconButton(onClick = onToggle, modifier = Modifier.size(48.dp)) {
                     when {
                         state.isPlaying && state.isBuffering -> CircularProgressIndicator(
                             modifier = Modifier.size(24.dp),
