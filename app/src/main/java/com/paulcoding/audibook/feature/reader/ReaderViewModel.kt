@@ -25,7 +25,6 @@ class ReaderViewModel(
 
     fun togglePlay() = controller.togglePlay()
     fun seekTo(chapter: Int, sentence: Int) = controller.seekTo(chapter, sentence)
-    fun playFrom(sentence: Int) = controller.playFrom(sentence)
     fun nextSentence() = controller.nextSentence()
     fun previousSentence() = controller.previousSentence()
     fun nextChapter() = controller.nextChapter()

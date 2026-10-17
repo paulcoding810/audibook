@@ -137,17 +137,6 @@ class ReadAloudController(
         }
     }
 
-    /** Starts reading at [sentence] of the chapter currently shown. */
-    fun playFrom(sentence: Int) {
-        val current = _state.value
-        val chapter = current.chapter ?: return
-        if (current.isPlaying) return seekTo(chapter.index, sentence)
-        val index = sentence.coerceIn(0, (chapter.sentences.size - 1).coerceAtLeast(0))
-        _state.update { it.copy(position = Position(chapter.index, index)) }
-        saveProgress()
-        play()
-    }
-
     fun nextSentence() {
         val (chapter, sentence) = _state.value.position
         val size = _state.value.chapter?.sentences?.size ?: 0

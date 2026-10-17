@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingActionButton
@@ -67,7 +66,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -183,7 +181,6 @@ fun ReaderScreen(
                 state = state,
                 onSentenceClick = { viewModel.seekTo(chapter.index, it) },
                 onResume = viewModel::togglePlay,
-                onPlayFrom = viewModel::playFrom,
                 modifier = Modifier.padding(padding),
             )
         }
@@ -212,14 +209,13 @@ fun ReaderScreen(
     }
 }
 
-/** Shows the chapter; follows playback while playing, and acts as a plain reader while paused. */
+/** Shows the chapter; follows playback while playing, and acts as a plain reader while paused (tap a sentence to start there). */
 @Composable
 private fun ChapterText(
     chapter: ChapterContent,
     state: PlaybackState,
     onSentenceClick: (Int) -> Unit,
     onResume: () -> Unit,
-    onPlayFrom: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -238,10 +234,6 @@ private fun ChapterText(
     val currentVisible by remember(currentParagraph) {
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == currentParagraph } }
     }
-    val layouts = remember(chapter) { HashMap<Int, TextLayoutResult>() }
-    val firstVisibleSentence by remember(chapter) {
-        derivedStateOf { listState.firstVisibleSentence(chapter, layouts) }
-    }
 
     LaunchedEffect(chapter.index) {
         follow = true
@@ -251,8 +243,7 @@ private fun ChapterText(
         if (follow && currentParagraph >= 0) listState.revealParagraph(currentParagraph)
     }
 
-    val scrolledPast = firstVisibleSentence?.let { it > currentSentence } == true
-    val scrolledAway = !follow && currentParagraph >= 0 && (!currentVisible || scrolledPast)
+    val scrolledAway = !follow && currentParagraph >= 0 && !currentVisible
     val paused = !state.isPlaying
 
     Box(modifier.fillMaxSize()) {
@@ -267,8 +258,8 @@ private fun ChapterText(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize().nestedScroll(userScroll),
         ) {
-            itemsIndexed(chapter.paragraphs, key = { index, _ -> "${chapter.index}:$index" }) { index, paragraph ->
-                ParagraphText(paragraph, chapter, currentSentence, onLayout = { layouts[index] = it }) {
+            itemsIndexed(chapter.paragraphs, key = { index, _ -> "${chapter.index}:$index" }) { _, paragraph ->
+                ParagraphText(paragraph, chapter, currentSentence) {
                     follow = true
                     onSentenceClick(it)
                 }
@@ -294,38 +285,12 @@ private fun ChapterText(
                 }
             }
             if (paused) {
-                val from = firstVisibleSentence
-                if (scrolledAway && from != null) {
-                    ExtendedFloatingActionButton(
-                        onClick = {
-                            follow = true
-                            onPlayFrom(from)
-                        },
-                        icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-                        text = { Text("Play from here") },
-                    )
-                } else {
-                    FloatingActionButton(onClick = onResume) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play")
-                    }
+                FloatingActionButton(onClick = onResume) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Play")
                 }
             }
         }
     }
-}
-
-/** First sentence whose beginning is on screen, using each paragraph's text layout. */
-private fun LazyListState.firstVisibleSentence(chapter: ChapterContent, layouts: Map<Int, TextLayoutResult>): Int? {
-    val item = layoutInfo.visibleItemsInfo.firstOrNull { it.offset + it.size > 0 } ?: return null
-    val paragraph = chapter.paragraphs.getOrNull(item.index) ?: return null
-    val hidden = -item.offset
-    val layout = layouts[item.index]
-    if (hidden <= 0 || layout == null) return paragraph.firstSentence
-    val visible = (paragraph.firstSentence until paragraph.firstSentence + paragraph.sentenceCount).firstOrNull { index ->
-        val sentence = chapter.sentences[index]
-        layout.getLineTop(layout.getLineForOffset(sentence.range.first)) >= hidden
-    }
-    return visible ?: chapter.paragraphs.getOrNull(item.index + 1)?.firstSentence
 }
 
 private suspend fun LazyListState.revealParagraph(index: Int) {
@@ -342,7 +307,6 @@ private fun ParagraphText(
     paragraph: Paragraph,
     chapter: ChapterContent,
     currentSentence: Int,
-    onLayout: (TextLayoutResult) -> Unit,
     onSentenceClick: (Int) -> Unit,
 ) {
     val highlight = MaterialTheme.colorScheme.primaryContainer
@@ -371,7 +335,6 @@ private fun ParagraphText(
     }
     Text(
         text,
-        onTextLayout = onLayout,
         style = if (paragraph.isHeading) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge.copy(
             lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15f,
         ),
