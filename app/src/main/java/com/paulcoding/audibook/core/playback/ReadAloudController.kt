@@ -4,6 +4,7 @@ import android.content.Context
 import com.paulcoding.audibook.core.data.BookRepository
 import com.paulcoding.audibook.core.data.EngineType
 import com.paulcoding.audibook.core.data.SettingsRepository
+import com.paulcoding.audibook.core.data.SleepPrefs
 import com.paulcoding.audibook.core.data.TtsSettings
 import com.paulcoding.audibook.core.data.db.BookEntity
 import com.paulcoding.audibook.core.epub.ChapterContent
@@ -61,6 +62,11 @@ class ReadAloudController(
     private val _errors = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val errors: SharedFlow<String> = _errors.asSharedFlow()
 
+    private val _sleepAutoStarted = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+    /** Emits the duration whenever Play starts the sleep timer automatically. */
+    val sleepAutoStarted: SharedFlow<Int> = _sleepAutoStarted.asSharedFlow()
+    private var sleepPrefs = SleepPrefs()
+
     private var playJob: Job? = null
     private var previewJob: Job? = null
     private var audioJob: Job? = null
@@ -68,7 +74,7 @@ class ReadAloudController(
 
     private val focus = AudioFocus(
         context,
-        onPause = { transient -> if (transient) stopSpeaking() else pause() },
+        onPause = { transient -> if (transient) stopSpeaking() else pause(byUser = false) },
         onResume = ::play,
     )
 
@@ -76,12 +82,15 @@ class ReadAloudController(
         scope.launch {
             settings.settings.drop(1).collect { restartIfPlaying() }
         }
+        scope.launch {
+            settings.sleepPrefs.collect { sleepPrefs = it }
+        }
     }
 
     suspend fun open(bookId: String) {
         if (_state.value.book?.id == bookId) return
         val book = books.getBook(bookId) ?: return
-        pause()
+        pause(byUser = false)
         val chapters = books.chapters(book)
         var chapterIndex = book.chapterIndex.coerceIn(0, chapters.lastIndex)
         var content = books.chapter(book, chapterIndex)
@@ -111,9 +120,15 @@ class ReadAloudController(
         }
         _state.update { it.copy(isPlaying = true) }
         playJob = startSpeaking(book, current.position)
+        if (sleepPrefs.autoStart && _state.value.sleepTimerEndsAt == null) {
+            setSleepTimer(sleepPrefs.minutes)
+            _sleepAutoStarted.tryEmit(sleepPrefs.minutes)
+        }
     }
 
-    fun pause() {
+    /** Stops reading; a pause the user asked for also cancels the sleep timer, interruptions keep it. */
+    fun pause(byUser: Boolean = true) {
+        if (byUser) setSleepTimer(null)
         val wasActive = playJob != null
         stopSpeaking()
         focus.abandon()
@@ -168,13 +183,13 @@ class ReadAloudController(
         _state.update { it.copy(sleepTimerEndsAt = System.currentTimeMillis() + durationMs) }
         sleepJob = scope.launch {
             delay(durationMs)
-            pause()
+            pause(byUser = false)
             _state.update { it.copy(sleepTimerEndsAt = null) }
         }
     }
 
     fun preview(text: String, language: String?) {
-        pause()
+        pause(byUser = false)
         previewJob = launchAudio {
             try {
                 val current = settings.settings.first()

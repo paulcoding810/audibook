@@ -1,6 +1,7 @@
 package com.paulcoding.audibook.core.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -19,6 +20,11 @@ data class TtsSettings(
     val sherpaSpeaker: Int = 0,
     val speed: Float = 1f,
     val pitch: Float = 1f,
+)
+
+data class SleepPrefs(
+    val minutes: Int = 30,
+    val autoStart: Boolean = false,
 )
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -54,6 +60,14 @@ class SettingsRepository(context: Context) {
 
     suspend fun setPitch(pitch: Float) = store.edit { it[PITCH] = pitch }
 
+    val sleepPrefs: Flow<SleepPrefs> = store.data.map { prefs ->
+        SleepPrefs(minutes = prefs[SLEEP_MINUTES] ?: 30, autoStart = prefs[SLEEP_AUTO] ?: false)
+    }.distinctUntilChanged()
+
+    suspend fun setSleepMinutes(minutes: Int) = store.edit { it[SLEEP_MINUTES] = minutes }
+
+    suspend fun setSleepAutoStart(enabled: Boolean) = store.edit { it[SLEEP_AUTO] = enabled }
+
     private companion object {
         val ENGINE = stringPreferencesKey("engine")
         val SYSTEM_VOICE = stringPreferencesKey("system_voice")
@@ -61,5 +75,7 @@ class SettingsRepository(context: Context) {
         val SHERPA_SPEAKER = intPreferencesKey("sherpa_speaker")
         val SPEED = floatPreferencesKey("speed")
         val PITCH = floatPreferencesKey("pitch")
+        val SLEEP_MINUTES = intPreferencesKey("sleep_minutes")
+        val SLEEP_AUTO = booleanPreferencesKey("sleep_auto")
     }
 }

@@ -47,6 +47,7 @@ Single `app` module, Compose + Koin + Media3. Package `com.paulcoding.audibook`:
 - The manifest needs `<queries>` for `android.intent.action.TTS_SERVICE` (API 30+ package visibility).
 - `ReadAloudController` guards against cancelled playback jobs changing state (`playJob !== self`). Keep that when touching play/seek/restart logic.
 - Pause stops synthesis. Resume restarts from the current sentence.
+- `ReadAloudController.pause(byUser)`: a pause the user asked for (UI, notification, headset) cancels the sleep timer; interruptions (audio focus loss, unplugged headphones, the timer itself, switching books, voice preview) pass `byUser = false` and keep it. With auto-start on, Play starts the timer using the saved duration.
 
 ## Device testing notes
 

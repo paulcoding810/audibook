@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -42,10 +44,14 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -54,7 +60,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,19 +77,25 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.paulcoding.audibook.core.data.SleepPrefs
 import com.paulcoding.audibook.core.epub.ChapterContent
 import com.paulcoding.audibook.core.epub.Paragraph
 import com.paulcoding.audibook.core.playback.PlaybackState
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 private val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
-private val sleepOptions = listOf(5, 15, 30, 45, 60)
+private const val SLEEP_MIN = 5
+private const val SLEEP_MAX = 120
+private const val SLEEP_STEP = 5
 private val plainLink = TextLinkStyles(style = SpanStyle())
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,11 +111,18 @@ fun ReaderScreen(
     val snackbar = remember { SnackbarHostState() }
     var showToc by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
+    val sleepPrefs by viewModel.sleepPrefs.collectAsStateWithLifecycle()
     val ready = state.book?.id == bookId
     val topBarScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     LaunchedEffect(Unit) {
         viewModel.errors.collect { snackbar.showSnackbar(it) }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.sleepAutoStarted.collect { minutes ->
+            val result = snackbar.showSnackbar("Sleep timer: ${formatMinutes(minutes)}", actionLabel = "Cancel", duration = SnackbarDuration.Short)
+            if (result == SnackbarResult.ActionPerformed) viewModel.setSleepTimer(null)
+        }
     }
 
     Scaffold(
@@ -130,29 +151,12 @@ fun ReaderScreen(
                     IconButton(onClick = { showToc = true }) {
                         Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Chapters")
                     }
-                    Box {
-                        IconButton(onClick = { showSleep = true }) {
-                            Icon(
-                                Icons.Default.Bedtime,
-                                contentDescription = "Sleep timer",
-                                tint = if (state.sleepTimerEndsAt != null) MaterialTheme.colorScheme.primary else LocalContentColor.current,
-                            )
-                        }
-                        DropdownMenu(expanded = showSleep, onDismissRequest = { showSleep = false }) {
-                            state.sleepTimerEndsAt?.let { endsAt ->
-                                val left = ((endsAt - System.currentTimeMillis()) / 60_000).coerceAtLeast(0) + 1
-                                DropdownMenuItem(text = { Text("Turn off ($left min left)") }, onClick = {
-                                    viewModel.setSleepTimer(null)
-                                    showSleep = false
-                                })
-                            }
-                            sleepOptions.forEach { minutes ->
-                                DropdownMenuItem(text = { Text("$minutes minutes") }, onClick = {
-                                    viewModel.setSleepTimer(minutes)
-                                    showSleep = false
-                                })
-                            }
-                        }
+                    IconButton(onClick = { showSleep = true }) {
+                        Icon(
+                            Icons.Default.Bedtime,
+                            contentDescription = "Sleep timer",
+                            tint = if (state.sleepTimerEndsAt != null) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                        )
                     }
                     IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
                 },
@@ -184,6 +188,23 @@ fun ReaderScreen(
                 modifier = Modifier.padding(padding),
             )
         }
+    }
+
+    if (showSleep) {
+        SleepTimerSheet(
+            prefs = sleepPrefs,
+            endsAt = state.sleepTimerEndsAt,
+            onStart = {
+                viewModel.setSleepTimer(it)
+                showSleep = false
+            },
+            onTurnOff = {
+                viewModel.setSleepTimer(null)
+                showSleep = false
+            },
+            onAutoStartChange = viewModel::setSleepAutoStart,
+            onDismiss = { showSleep = false },
+        )
     }
 
     if (showToc) {
@@ -339,6 +360,76 @@ private fun ParagraphText(
             lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15f,
         ),
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SleepTimerSheet(
+    prefs: SleepPrefs,
+    endsAt: Long?,
+    onStart: (Int) -> Unit,
+    onTurnOff: () -> Unit,
+    onAutoStartChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var minutes by remember { mutableFloatStateOf(prefs.minutes.coerceIn(SLEEP_MIN, SLEEP_MAX).toFloat()) }
+    val minutesLeft by produceState(endsAt?.let(::minutesUntil), endsAt) {
+        while (endsAt != null) {
+            value = minutesUntil(endsAt)
+            delay(1_000)
+        }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+            Text("Sleep timer", style = MaterialTheme.typography.titleLarge)
+            minutesLeft?.let {
+                Text(
+                    "Stops in ${formatMinutes(it)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Row(Modifier.padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Slider(
+                    value = minutes,
+                    onValueChange = { minutes = it },
+                    valueRange = SLEEP_MIN.toFloat()..SLEEP_MAX.toFloat(),
+                    steps = (SLEEP_MAX - SLEEP_MIN) / SLEEP_STEP - 1,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    formatMinutes(minutes.roundToInt()),
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.width(96.dp),
+                )
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onAutoStartChange(!prefs.autoStart) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Start automatically when I press Play", modifier = Modifier.weight(1f))
+                Switch(checked = prefs.autoStart, onCheckedChange = onAutoStartChange)
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                if (endsAt != null) TextButton(onClick = onTurnOff) { Text("Turn off") }
+                Button(onClick = { onStart(minutes.roundToInt()) }, modifier = Modifier.padding(start = 8.dp)) {
+                    Text(if (endsAt != null) "Restart" else "Start")
+                }
+            }
+        }
+    }
+}
+
+private fun minutesUntil(endsAt: Long) = ((endsAt - System.currentTimeMillis() + 59_999) / 60_000).toInt().coerceAtLeast(0)
+
+private fun formatMinutes(minutes: Int) = when {
+    minutes < 60 -> "$minutes minutes"
+    minutes % 60 == 0 -> if (minutes == 60) "1 hour" else "${minutes / 60} hours"
+    else -> "${minutes / 60} h ${minutes % 60} min"
 }
 
 @Composable
