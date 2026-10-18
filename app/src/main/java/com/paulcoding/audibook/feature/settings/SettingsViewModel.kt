@@ -7,6 +7,7 @@ import com.paulcoding.audibook.core.data.SettingsRepository
 import com.paulcoding.audibook.core.data.TtsSettings
 import com.paulcoding.audibook.core.playback.ReadAloudController
 import com.paulcoding.audibook.core.tts.ModelManager
+import com.paulcoding.audibook.core.update.AppUpdater
 import com.paulcoding.audibook.core.tts.ModelState
 import com.paulcoding.audibook.core.tts.SystemTtsEngine
 import com.paulcoding.audibook.core.tts.SystemVoice
@@ -24,7 +25,16 @@ class SettingsViewModel(
     private val systemEngine: SystemTtsEngine,
     private val models: ModelManager,
     private val controller: ReadAloudController,
+    private val updater: AppUpdater,
 ) : ViewModel() {
+    val updateState = updater.state
+    val updateMessages = updater.messages
+    val canSelfUpdate = updater.canSelfUpdate
+
+    fun checkForUpdate() = updater.check()
+    fun installUpdate() = updater.downloadAndInstall()
+    fun dismissUpdate() = updater.dismiss()
+
     val state: StateFlow<TtsSettings?> = settings.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

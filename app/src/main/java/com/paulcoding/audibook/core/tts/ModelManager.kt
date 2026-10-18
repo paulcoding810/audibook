@@ -1,12 +1,8 @@
 package com.paulcoding.audibook.core.tts
 
 import android.content.Context
+import com.paulcoding.audibook.core.network.downloadTo
 import io.ktor.client.HttpClient
-import io.ktor.client.request.prepareGet
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.http.contentLength
-import io.ktor.http.isSuccess
-import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -88,7 +84,7 @@ class ModelManager(context: Context, private val client: HttpClient) {
             val archive = File(root, "${model.id}.tar.bz2.part")
             try {
                 setState(model.id, ModelState.Downloading(null))
-                fetch(model.url, archive) { setState(model.id, ModelState.Downloading(it)) }
+                client.downloadTo(model.url, archive) { setState(model.id, ModelState.Downloading(it)) }
                 setState(model.id, ModelState.Extracting)
                 extract(archive, dir(model.id))
                 File(dir(model.id), MARKER).createNewFile()
@@ -137,33 +133,6 @@ class ModelManager(context: Context, private val client: HttpClient) {
         if (isInstalled(model.id)) ModelState.Installed else ModelState.NotInstalled
 
     private fun setState(id: String, state: ModelState) = _states.update { it + (id to state) }
-
-    private suspend fun fetch(url: String, target: File, onProgress: (Float?) -> Unit) {
-        client.prepareGet(url).execute { response ->
-            if (!response.status.isSuccess()) throw TtsException("Download failed: HTTP ${response.status.value}")
-            val total = response.contentLength()
-            val channel = response.bodyAsChannel()
-            val buffer = ByteArray(64 * 1024)
-            var read = 0L
-            var lastReported = -1
-            target.outputStream().use { out ->
-                while (true) {
-                    coroutineContext.ensureActive()
-                    val n = channel.readAvailable(buffer, 0, buffer.size)
-                    if (n == -1) break
-                    out.write(buffer, 0, n)
-                    read += n
-                    if (total != null && total > 0) {
-                        val percent = (read * 100 / total).toInt()
-                        if (percent != lastReported) {
-                            lastReported = percent
-                            onProgress(read.toFloat() / total)
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     /** Extracts the archive into [target], dropping its single top-level folder. */
     private suspend fun extract(archive: File, target: File) {

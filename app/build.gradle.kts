@@ -33,9 +33,11 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "GITHUB_REPO", "\"paulcoding810/audibook\"")
 
     }
 
@@ -45,6 +47,20 @@ android {
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
             isUniversalApk = true
+        }
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("foss") {
+            dimension = "distribution"
+            dependenciesInfo {
+                includeInApk = false
+                includeInBundle = false
+            }
+        }
+        create("gplay") {
+            dimension = "distribution"
         }
     }
 
@@ -61,6 +77,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

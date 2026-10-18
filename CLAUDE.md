@@ -5,22 +5,26 @@ Android app that imports EPUBs and reads them aloud with Google TTS or on-device
 ## Build & test
 
 ```sh
-./gradlew :app:testDebugUnitTest      # JVM unit tests (parser, splitter, WAV decoder)
-./gradlew :app:assembleDebug
-./gradlew :app:installDebug
+./gradlew :app:testFossDebugUnitTest   # JVM unit tests (parser, splitter, WAV decoder, update logic)
+./gradlew :app:assembleFossDebug
+./gradlew :app:installFossDebug
 ```
 
+- Two product flavors (dimension `distribution`):
+  - `foss` is the GitHub build. It has the in-app updater (`src/foss`: `GitHubAppUpdater`, `REQUEST_INSTALL_PACKAGES`, a FileProvider).
+  - `gplay` is the Play build. It has no self-update code or install permission; "Check for updates" just opens the Play listing.
+  - Each flavor binds `AppUpdater` in its own `core/di/FlavorModule.kt`. Never add self-update code or the install permission to `src/main`.
 - AGP 9 with built-in Kotlin (no `kotlin-android` plugin). Compiled classes land in `app/build/intermediates/built_in_kotlinc/`, not `tmp/kotlin-classes`.
 - Room uses KSP. Dependency versions live in `gradle/libs.versions.toml`.
 - sherpa-onnx comes from JitPack (`com.github.k2-fsa.sherpa-onnx:sherpa-onnx`, AAR). The JitPack repo in `settings.gradle.kts` is restricted to that group.
-- ABI splits produce one APK per ABI (~40–55 MB release, mostly sherpa-onnx native libs) plus a universal APK (~140 MB). Install the matching one, e.g. `app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`.
+- ABI splits produce one APK per ABI (~40–55 MB release, mostly sherpa-onnx native libs) plus a universal APK (~140 MB). Install the matching one, e.g. `app/build/outputs/apk/foss/debug/app-foss-arm64-v8a-debug.apk`.
 - Release signing reads `key.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) from the repo root; without it, release APKs are unsigned. Never commit `key.properties` or keystores.
 
 ## CI/CD (`.github/workflows`)
 
 - `dev.yml`: on push/PR to `main`, runs unit tests and uploads the universal debug APK.
-- `release.yml`: on a `v*.*` tag, builds signed per-ABI APKs and creates a draft GitHub release. Needs the repo secrets `KEY_PROPERTIES` (file contents, with `storeFile=release.keystore`) and `RELEASE_KEYSTORE_BASE64` (`base64 -i release.keystore`).
-- `publish-playstore.yml`: manual run; builds the release AAB and uploads it as a draft to the chosen Play track (internal/alpha/beta/production). Also needs `PLAY_STORE_JSON_KEY` (service account JSON). Bump `versionCode` in `app/build.gradle.kts` before each upload; Play rejects reused codes.
+- `release.yml`: on a `v*.*` tag, builds signed per-ABI foss APKs and creates a draft GitHub release. Needs the repo secrets `KEY_PROPERTIES` (file contents, with `storeFile=release.keystore`) and `RELEASE_KEYSTORE_BASE64` (`base64 -i release.keystore`).
+- `publish-playstore.yml`: manual run; builds the gplay release AAB and uploads it as a draft to the chosen Play track (internal/alpha/beta/production). Also needs `PLAY_STORE_JSON_KEY` (service account JSON). Bump `versionCode` in `app/build.gradle.kts` before each upload; Play rejects reused codes.
 
 ## Architecture
 
@@ -55,3 +59,9 @@ Single `app` module, Compose + Koin + Media3. Package `com.paulcoding.audibook`:
 - Inspect app state with `adb shell run-as com.paulcoding.audibook sqlite3 databases/audibook.db 'select title,chapterIndex,sentenceIndex from books'`.
 - Galaxy Fold devices have multiple displays, so `screencap` fails; use `uiautomator dump` instead.
 - In zsh, `ADB="adb -s X"; $ADB ...` does not word-split. Use a wrapper script or call `adb -s X` directly.
+
+## Releasing
+
+- Bump `versionName` and `versionCode` in `app/build.gradle.kts`, then tag `v<versionName>`. `release.yml` fails if the tag doesn't match `versionName`; otherwise the updater would keep offering the same version.
+- `release.yml` creates a **draft** release, so publish it. GitHub's `/releases/latest`, which the updater uses, ignores drafts and pre-releases.
+- Keep APK asset names ending in `-<abi>.apk` (or `-<abi>-release.apk`). `pickApk()` in `core/update/UpdateLogic.kt` picks the asset for the device's CPU type that way.

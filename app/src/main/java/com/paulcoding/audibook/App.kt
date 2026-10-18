@@ -2,6 +2,7 @@ package com.paulcoding.audibook
 
 import android.app.Application
 import com.paulcoding.audibook.core.di.dataModule
+import com.paulcoding.audibook.core.di.flavorModule
 import com.paulcoding.audibook.core.di.ttsModule
 import com.paulcoding.audibook.core.network.di.networkModule
 import org.koin.android.ext.koin.androidContext
@@ -18,6 +19,7 @@ class App : Application() {
                     networkModule,
                     dataModule,
                     ttsModule,
+                    flavorModule,
                     viewModelModule,
                 )
             )
