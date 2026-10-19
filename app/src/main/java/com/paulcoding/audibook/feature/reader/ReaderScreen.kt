@@ -35,6 +35,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -101,6 +102,7 @@ private val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
 private const val SLEEP_MIN = 5
 private const val SLEEP_MAX = 120
 private const val SLEEP_STEP = 5
+private val SLEEP_CHIPS = listOf(10, 15, 30, 45, 60)
 private val plainLink = TextLinkStyles(style = SpanStyle())
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -457,7 +459,7 @@ private fun SleepTimerSheet(
         }
     }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+        Column(Modifier.navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 16.dp)) {
             Text("Sleep timer", style = MaterialTheme.typography.titleLarge)
             minutesLeft?.let {
                 Text(
@@ -481,6 +483,24 @@ private fun SleepTimerSheet(
                     modifier = Modifier.width(96.dp),
                 )
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                SLEEP_CHIPS.forEach { chip ->
+                    FilterChip(
+                        selected = minutes.roundToInt() == chip,
+                        onClick = {
+                            minutes = chip.toFloat()
+                            onStart(chip)
+                        },
+                        label = { Text("$chip", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            Text(
+                "Tap a chip to start right away (minutes)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Row(
                 Modifier
                     .fillMaxWidth()
