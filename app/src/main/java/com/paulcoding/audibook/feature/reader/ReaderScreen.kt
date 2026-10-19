@@ -214,25 +214,15 @@ fun ReaderScreen(
     }
 
     if (showToc) {
-        ModalBottomSheet(onDismissRequest = { showToc = false }) {
-            val tocState = rememberLazyListState(initialFirstVisibleItemIndex = (state.position.chapter - 2).coerceAtLeast(0))
-            LazyColumn(state = tocState) {
-                itemsIndexed(state.chapters) { index, chapter ->
-                    val current = index == state.position.chapter
-                    ListItem(
-                        headlineContent = {
-                            Text(chapter.title, fontWeight = if (current) FontWeight.Bold else null)
-                        },
-                        leadingContent = { Text("${index + 1}", style = MaterialTheme.typography.labelMedium) },
-                        colors = if (current) ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.secondaryContainer) else ListItemDefaults.colors(),
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            viewModel.seekTo(index, 0)
-                            showToc = false
-                        },
-                    )
-                }
-            }
-        }
+        ChapterListSheet(
+            chapters = state.chapters,
+            current = state.position.chapter,
+            onSelect = {
+                viewModel.seekTo(it, 0)
+                showToc = false
+            },
+            onDismiss = { showToc = false },
+        )
     }
 }
 
