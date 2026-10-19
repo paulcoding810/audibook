@@ -6,10 +6,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.PowerManager
-import android.os.SystemClock
-import kotlin.math.sqrt
 
-/** Listens for a deliberate shake (two strong jolts within a second), keeping the CPU awake for at most [maxListenMs]. */
+/** Listens for a deliberate shake (sustained back-and-forth motion), keeping the CPU awake for at most [maxListenMs]. */
 class ShakeDetector(context: Context) {
     private val sensorManager = context.getSystemService(SensorManager::class.java)
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -23,18 +21,13 @@ class ShakeDetector(context: Context) {
     fun start(maxListenMs: Long, onShake: () -> Unit) {
         stop()
         val sensor = accelerometer ?: return
-        var lastJolt = 0L
+        val window = ShakeWindow()
         listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 val (x, y, z) = event.values
-                val gForce = sqrt(x * x + y * y + z * z) / SensorManager.GRAVITY_EARTH
-                if (gForce < JOLT_G) return
-                val now = SystemClock.elapsedRealtime()
-                if (now - lastJolt in MIN_GAP_MS..MAX_GAP_MS) {
+                if (window.add(event.timestamp, x * x + y * y + z * z > ACCELERATING_SQUARED)) {
                     stop()
                     onShake()
-                } else if (now - lastJolt > MIN_GAP_MS) {
-                    lastJolt = now
                 }
             }
 
@@ -51,8 +44,32 @@ class ShakeDetector(context: Context) {
     }
 
     private companion object {
-        const val JOLT_G = 2.3f
-        const val MIN_GAP_MS = 120L
-        const val MAX_GAP_MS = 1_000L
+        /** ~1.33 g: a normal hand shake goes well past this; lying still reads ~1 g. */
+        const val ACCELERATING_SQUARED = 13f * 13f
+    }
+}
+
+/**
+ * Sliding window of recent samples (the approach of Square's "seismic"): it's a shake when the samples cover
+ * at least [MIN_SPAN_NS] and three quarters of them are accelerating. One bump (e.g. rolling over) isn't enough.
+ */
+internal class ShakeWindow {
+    private val samples = ArrayDeque<Pair<Long, Boolean>>()
+
+    /** Adds a sample at [timestampNs]; returns true when the window now counts as a shake. */
+    fun add(timestampNs: Long, accelerating: Boolean): Boolean {
+        samples.addLast(timestampNs to accelerating)
+        while (samples.size > MIN_SAMPLES && timestampNs - samples.first().first > MAX_SPAN_NS) samples.removeFirst()
+        val span = timestampNs - samples.first().first
+        val shaking = samples.size >= MIN_SAMPLES && span >= MIN_SPAN_NS &&
+            samples.count { it.second } >= samples.size * 3 / 4
+        if (shaking) samples.clear()
+        return shaking
+    }
+
+    private companion object {
+        const val MIN_SAMPLES = 4
+        const val MIN_SPAN_NS = 250_000_000L
+        const val MAX_SPAN_NS = 500_000_000L
     }
 }
