@@ -18,6 +18,8 @@ Android app that imports EPUBs and reads them aloud with Google TTS or on-device
 - Room uses KSP. Dependency versions live in `gradle/libs.versions.toml`.
 - sherpa-onnx comes from JitPack (`com.github.k2-fsa.sherpa-onnx:sherpa-onnx`, AAR). The JitPack repo in `settings.gradle.kts` is restricted to that group.
 - ABI splits produce one APK per ABI (~40–55 MB release, mostly sherpa-onnx native libs) plus a universal APK (~140 MB). Install the matching one, e.g. `app/build/outputs/apk/foss/debug/app-foss-arm64-v8a-debug.apk`.
+- Release builds use R8 (`isMinifyEnabled` + `isShrinkResources`). sherpa-onnx's native code accesses its Kotlin config classes by name, and its AAR ships no rules, so `proguard-rules.pro` keeps `com.k2fsa.sherpa.onnx.**`. After dependency changes, smoke-test a release build: an AI voice, Google TTS, and an update check against a real release.
+- ABI splits are disabled automatically for `bundle*` tasks, because AGP 9 rejects ABI splits combined with resource shrinking when building an AAB, and Play splits by ABI itself.
 - Release signing reads `key.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) from the repo root; without it, release APKs are unsigned. Never commit `key.properties` or keystores.
 
 ## CI/CD (`.github/workflows`)

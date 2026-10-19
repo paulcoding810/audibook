@@ -19,3 +19,6 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# sherpa-onnx: native code reads config fields and calls methods by name, and its AAR ships no rules.
+-keep class com.k2fsa.sherpa.onnx.** { *; }
