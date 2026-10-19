@@ -66,6 +66,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,6 +92,7 @@ import com.paulcoding.audibook.core.epub.Paragraph
 import com.paulcoding.audibook.core.playback.PlaybackState
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -186,7 +188,7 @@ fun ReaderScreen(
                 chapter = chapter,
                 state = state,
                 onSentenceClick = { viewModel.seekTo(chapter.index, it) },
-                onOpenChapter = { viewModel.seekTo(it, 0) },
+                onOpenChapter = viewModel::seekTo,
                 onResume = viewModel::togglePlay,
                 modifier = Modifier.padding(padding),
             )
@@ -240,7 +242,7 @@ private fun ChapterText(
     chapter: ChapterContent,
     state: PlaybackState,
     onSentenceClick: (Int) -> Unit,
-    onOpenChapter: (Int) -> Unit,
+    onOpenChapter: (chapter: Int, sentence: Int) -> Unit,
     onResume: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -265,12 +267,17 @@ private fun ChapterText(
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == currentParagraph } }
     }
 
+    val scope = rememberCoroutineScope()
+    val lastItem = firstParagraphItem + chapter.paragraphs.size.coerceAtLeast(1) - 1 + (if (next != null) 1 else 0)
+    val atChapterEnd = currentSentence > 0 && currentSentence == chapter.sentences.lastIndex
+
     LaunchedEffect(chapter.index) {
         follow = true
-        listState.scrollToItem(currentParagraph.coerceAtLeast(0))
+        // Arriving at the last sentence (e.g. "Previous chapter") shows the end of the chapter, like turning back a page.
+        listState.scrollToItem(if (atChapterEnd) lastItem else currentParagraph.coerceAtLeast(0))
     }
-    LaunchedEffect(currentParagraph, follow) {
-        if (follow && currentParagraph >= 0) listState.revealParagraph(currentParagraph)
+    LaunchedEffect(currentParagraph, follow, state.isPlaying) {
+        if (follow && state.isPlaying && currentParagraph >= 0) listState.revealParagraph(currentParagraph)
     }
 
     val scrolledAway = !follow && currentParagraph >= 0 && !currentVisible
@@ -294,7 +301,7 @@ private fun ChapterText(
                         label = if (previous.title == chapter.title) "Previous section" else "Previous chapter",
                         title = previous.title,
                         forward = false,
-                        onClick = { onOpenChapter(previous.index) },
+                        onClick = { onOpenChapter(previous.index, Int.MAX_VALUE) },
                     )
                 }
             }
@@ -319,7 +326,7 @@ private fun ChapterText(
                         label = if (next.title == chapter.title) "Continue" else "Next chapter",
                         title = next.title,
                         forward = true,
-                        onClick = { onOpenChapter(next.index) },
+                        onClick = { onOpenChapter(next.index, 0) },
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }
@@ -331,7 +338,10 @@ private fun ChapterText(
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
         ) {
             if (scrolledAway) {
-                SmallFloatingActionButton(onClick = { follow = true }) {
+                SmallFloatingActionButton(onClick = {
+                    follow = true
+                    scope.launch { listState.revealParagraph(currentParagraph) }
+                }) {
                     Icon(Icons.Default.MyLocation, contentDescription = "Go to current sentence")
                 }
             }
