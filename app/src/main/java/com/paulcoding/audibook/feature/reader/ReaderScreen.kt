@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.FastForward
@@ -43,6 +44,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SmallFloatingActionButton
@@ -184,6 +186,7 @@ fun ReaderScreen(
                 chapter = chapter,
                 state = state,
                 onSentenceClick = { viewModel.seekTo(chapter.index, it) },
+                onOpenChapter = { viewModel.seekTo(it, 0) },
                 onResume = viewModel::togglePlay,
                 modifier = Modifier.padding(padding),
             )
@@ -236,13 +239,18 @@ private fun ChapterText(
     chapter: ChapterContent,
     state: PlaybackState,
     onSentenceClick: (Int) -> Unit,
+    onOpenChapter: (Int) -> Unit,
     onResume: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
     var follow by remember { mutableStateOf(true) }
     val currentSentence = if (state.position.chapter == chapter.index) state.position.sentence else -1
-    val currentParagraph = chapter.sentences.getOrNull(currentSentence)?.paragraph ?: -1
+    val previous = state.chapters.getOrNull(chapter.index - 1)
+    val next = state.chapters.getOrNull(chapter.index + 1)
+    // The "previous chapter" link is list item 0, so paragraphs start after it.
+    val firstParagraphItem = if (previous != null) 1 else 0
+    val currentParagraph = chapter.sentences.getOrNull(currentSentence)?.paragraph?.plus(firstParagraphItem) ?: -1
 
     val userScroll = remember {
         object : NestedScrollConnection {
@@ -274,11 +282,21 @@ private fun ChapterText(
                 start = 16.dp,
                 end = 16.dp,
                 top = 8.dp,
-                bottom = if (paused || scrolledAway) 96.dp else 16.dp,
+                bottom = 16.dp + (if (paused) 72.dp else 0.dp) + (if (scrolledAway) 56.dp else 0.dp),
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize().nestedScroll(userScroll),
         ) {
+            if (previous != null) {
+                item(key = "previous") {
+                    ChapterLink(
+                        label = if (previous.title == chapter.title) "Previous section" else "Previous chapter",
+                        title = previous.title,
+                        forward = false,
+                        onClick = { onOpenChapter(previous.index) },
+                    )
+                }
+            }
             itemsIndexed(chapter.paragraphs, key = { index, _ -> "${chapter.index}:$index" }) { _, paragraph ->
                 ParagraphText(paragraph, chapter, currentSentence) {
                     follow = true
@@ -291,6 +309,17 @@ private fun ChapterText(
                         "This section has no text.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+            if (next != null) {
+                item(key = "next") {
+                    ChapterLink(
+                        label = if (next.title == chapter.title) "Continue" else "Next chapter",
+                        title = next.title,
+                        forward = true,
+                        onClick = { onOpenChapter(next.index) },
+                        modifier = Modifier.padding(top = 12.dp),
                     )
                 }
             }
@@ -310,6 +339,29 @@ private fun ChapterText(
                     Icon(Icons.Default.PlayArrow, contentDescription = "Play")
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ChapterLink(label: String, title: String, forward: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    OutlinedCard(onClick = onClick, modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (!forward) Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+            Column(
+                horizontalAlignment = if (forward) Alignment.End else Alignment.Start,
+                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+            ) {
+                Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = if (forward) TextAlign.End else TextAlign.Start,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (forward) Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
         }
     }
 }
