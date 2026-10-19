@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paulcoding.audibook.BuildConfig
 import com.paulcoding.audibook.core.data.EngineType
 import com.paulcoding.audibook.core.data.TtsSettings
+import com.paulcoding.audibook.core.tts.ModelCatalog
 import com.paulcoding.audibook.core.tts.SystemVoice
 import com.paulcoding.audibook.core.tts.TtsModel
 import com.paulcoding.audibook.core.update.AppRelease
@@ -305,7 +306,7 @@ private fun SherpaSection(
         EngineOption(
             selected = current.sherpaModelId == model.id,
             title = model.name,
-            description = "${model.language} · ${model.sizeMb} MB",
+            description = ModelCatalog.languageLabel(model.language) + if (model.sizeMb > 0) " · ${model.sizeMb} MB" else "",
             onClick = { viewModel.setModel(model.id) },
             badge = { VoiceWeightBadge(model.weight) },
         )
@@ -314,16 +315,17 @@ private fun SherpaSection(
         Text("Download voice models")
     }
     val model = viewModel.model(current.sherpaModelId)
-    if (model != null && model.speakers > 1 && installed.any { it.id == model.id }) {
+    val speakers = model?.let { viewModel.speakerCount(it.id) } ?: 0
+    if (model != null && speakers > 1 && installed.any { it.id == model.id }) {
         var speaker by remember(current.sherpaSpeaker, model.id) { mutableFloatStateOf(current.sherpaSpeaker.toFloat()) }
         Column(Modifier.padding(horizontal = 16.dp)) {
-            Text("Speaker ${speaker.toInt() + 1} of ${model.speakers}", style = MaterialTheme.typography.bodyLarge)
+            Text("Speaker ${speaker.toInt() + 1} of $speakers", style = MaterialTheme.typography.bodyLarge)
             Slider(
                 value = speaker,
                 onValueChange = { speaker = it },
                 onValueChangeFinished = { viewModel.setSpeaker(speaker.toInt()) },
-                valueRange = 0f..(model.speakers - 1).toFloat(),
-                steps = if (model.speakers <= 20) model.speakers - 2 else 0,
+                valueRange = 0f..(speakers - 1).toFloat(),
+                steps = if (speakers <= 20) speakers - 2 else 0,
             )
         }
     }

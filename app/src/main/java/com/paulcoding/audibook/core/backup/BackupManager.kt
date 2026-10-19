@@ -86,7 +86,7 @@ class BackupManager(
                 )
             },
             settings = settings.exportSettings(),
-            models = models.catalog.filter { models.isInstalled(it.id) }.map { it.id },
+            models = models.installedIds(),
         )
         val output = context.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("Can't write to the chosen file")
         ZipOutputStream(output.buffered()).use { zip ->
@@ -151,7 +151,7 @@ class BackupManager(
             books.restoreProgress(book.id, entry.chapterIndex, entry.sentenceIndex, entry.lastReadAt)
         }
         settings.importSettings(backup.settings)
-        val missingModels = backup.models.filterNot(models::isInstalled).mapNotNull { models.model(it)?.name }
+        val missingModels = backup.models.filterNot(models::isInstalled).map { models.model(it)?.name ?: it }
         return ImportSummary(added, restored, unchanged, missingModels)
     }
 

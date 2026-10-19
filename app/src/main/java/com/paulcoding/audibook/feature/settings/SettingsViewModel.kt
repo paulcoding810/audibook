@@ -83,9 +83,7 @@ class SettingsViewModel(
     val state: StateFlow<TtsSettings?> = settings.settings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val installedModels: StateFlow<List<TtsModel>> = models.states
-        .map { states -> models.catalog.filter { states[it.id] == ModelState.Installed } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val installedModels: StateFlow<List<TtsModel>> = models.installed
 
     val errors = controller.errors
 
@@ -100,6 +98,9 @@ class SettingsViewModel(
     }
 
     fun model(id: String?) = id?.let(models::model)
+
+    /** Number of speakers in [id], known from the catalog or learned when the model was first loaded (0 = unknown). */
+    fun speakerCount(id: String) = models.speakerCount(id)
 
     fun setEngine(engine: EngineType) = launch { settings.setEngine(engine) }
     fun setSystemVoice(name: String?) = launch { settings.setSystemVoice(name) }

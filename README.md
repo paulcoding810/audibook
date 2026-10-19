@@ -31,12 +31,12 @@ Requires Android 8.0 (API 26) or newer.
 
 ## Voices
 
-| Voice | Engine | Size | Weight |
-|---|---|---|---|
-| Google Text-to-Speech | System TTS | (installed with the phone) | Light |
-| Piper (Amy, Lessac, Ryan, Alba, LibriTTS-R, Vietnamese) | sherpa-onnx | ~20 MB each | Light |
-| Kitten Nano (8 voices) | sherpa-onnx | 31 MB | Light |
-| Kokoro (11 voices / 103 multilingual voices) | sherpa-onnx | 103–147 MB | Heavy |
+| Voice | Engine | Notes |
+|---|---|---|
+| Google Text-to-Speech | System TTS | Installed with the phone; offline voices are preferred automatically |
+| 260+ on-device voices in 60+ languages | sherpa-onnx | Browse, search and filter by language in Settings → Voice models: Piper, Mimic3, Coqui, MMS, Kitten, Kokoro and more, labelled **Light** or **Heavy** |
+
+The voice list comes live from the [sherpa-onnx `tts-models` release](https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models) and is cached for a day. Voices that need other engines (Matcha, ZipVoice, Pocket, Supertonic) aren't listed yet.
 
 To get more Google voices, open Settings → Install more voices. Download the offline voice for your book's language for the most reliable playback.
 

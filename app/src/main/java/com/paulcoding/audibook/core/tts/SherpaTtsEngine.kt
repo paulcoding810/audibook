@@ -38,6 +38,7 @@ class SherpaTtsEngine(private val models: ModelManager) : SpeechEngine {
         val files = models.files(modelId) ?: throw TtsException("Voice model is not installed")
         return OfflineTts(null, OfflineTtsConfig(model = modelConfig(files), maxNumSentences = 1)).also {
             loaded = modelId to it
+            models.rememberSpeakerCount(modelId, it.numSpeakers())
         }
     }
 
@@ -51,6 +52,7 @@ class SherpaTtsEngine(private val models: ModelManager) : SpeechEngine {
                     tokens = files.tokens.absolutePath,
                     dataDir = dataDir,
                     lexicon = files.lexicons.joinToString(",") { it.absolutePath },
+                    dictDir = files.dictDir?.absolutePath.orEmpty(),
                 ),
                 numThreads = threads,
             )

@@ -60,6 +60,11 @@ Single `app` module, Compose + Koin + Media3. Package `com.paulcoding.audibook`:
 - Room schema changes need a `Migration` in `BookDatabase` (currently v2).
 - `ReadAloudController` guards against cancelled playback jobs changing state (`playJob !== self`). Keep that when touching play/seek/restart logic.
 - Pause stops synthesis. Resume restarts from the current sentence.
+- The voice catalog is dynamic:
+  - `ModelManager.refreshCatalog()` lists the sherpa-onnx `tts-models` release assets through the GitHub API and caches them for 24 h in `files/voice-catalog.json`.
+  - `ModelCatalog` (pure, unit-tested) turns file names into `TtsModel`s. It keeps the smallest precision per voice (int8 > fp16 > fp32) and drops engines AudiBook can't run.
+  - Each installed model saves its `model.json` (and `.speakers`, learned on first load) in its folder, so it keeps working offline and if it disappears upstream.
+  - To support a new engine (e.g. Matcha), add a `ModelType`, its config in `SherpaTtsEngine.modelConfig`, and its prefix in `ModelCatalog.parseOne`.
 - `ReadAloudController.pause(byUser)`: a pause the user asked for (UI, notification, headset) cancels the sleep timer; interruptions (audio focus loss, unplugged headphones, the timer itself, switching books, voice preview) pass `byUser = false` and keep it. With auto-start on, Play starts the timer using the saved duration.
 - Shake to resume: after the sleep timer stops playback, `ShakeDetector` listens for 5 minutes (`SHAKE_WINDOW_MS`), holding a partial wakelock that releases itself after that time. A shake resumes playback and restarts the timer. The window must stay shorter than Media3's 10-minute foreground grace period after a pause (`MediaSessionService.DEFAULT_FOREGROUND_SERVICE_TIMEOUT_MS`); otherwise resuming from the background is blocked.
 
