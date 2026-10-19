@@ -71,6 +71,8 @@ class ReadAloudController(
     private var previewJob: Job? = null
     private var audioJob: Job? = null
     private var sleepJob: Job? = null
+    private var shakeWindowJob: Job? = null
+    private val shake = ShakeDetector(context)
 
     private val focus = AudioFocus(
         context,
@@ -91,6 +93,7 @@ class ReadAloudController(
         if (_state.value.book?.id == bookId) return
         val book = books.getBook(bookId) ?: return
         pause(byUser = false)
+        stopShakeWindow()
         val chapters = books.chapters(book)
         var chapterIndex = book.chapterIndex.coerceIn(0, chapters.lastIndex)
         var content = books.chapter(book, chapterIndex)
@@ -104,6 +107,7 @@ class ReadAloudController(
     fun close(bookId: String) {
         if (_state.value.book?.id != bookId) return
         pause()
+        stopShakeWindow()
         _state.value = PlaybackState()
     }
 
@@ -113,6 +117,7 @@ class ReadAloudController(
         val current = _state.value
         val book = current.book ?: return
         if (playJob?.isActive == true) return
+        stopShakeWindow()
         previewJob?.cancel()
         if (!focus.request()) {
             _errors.tryEmit("Audio is in use by another app")
@@ -128,7 +133,10 @@ class ReadAloudController(
 
     /** Stops reading; a pause the user asked for also cancels the sleep timer, interruptions keep it. */
     fun pause(byUser: Boolean = true) {
-        if (byUser) setSleepTimer(null)
+        if (byUser) {
+            setSleepTimer(null)
+            stopShakeWindow()
+        }
         val wasActive = playJob != null
         stopSpeaking()
         focus.abandon()
@@ -185,7 +193,29 @@ class ReadAloudController(
             delay(durationMs)
             pause(byUser = false)
             _state.update { it.copy(sleepTimerEndsAt = null) }
+            if (sleepPrefs.shakeToResume) startShakeWindow(minutes)
         }
+    }
+
+    /** After the sleep timer stops, a shake within [SHAKE_WINDOW_MS] resumes reading with the same timer. */
+    private fun startShakeWindow(minutes: Int) {
+        stopShakeWindow()
+        if (!shake.isAvailable) return
+        shake.start(SHAKE_WINDOW_MS) {
+            stopShakeWindow()
+            play()
+            if (_state.value.isPlaying) setSleepTimer(minutes)
+        }
+        shakeWindowJob = scope.launch {
+            delay(SHAKE_WINDOW_MS)
+            shake.stop()
+        }
+    }
+
+    private fun stopShakeWindow() {
+        shakeWindowJob?.cancel()
+        shakeWindowJob = null
+        shake.stop()
     }
 
     fun preview(text: String, language: String?) {
@@ -294,4 +324,9 @@ class ReadAloudController(
 
     private fun engineFor(settings: TtsSettings): SpeechEngine =
         if (settings.engine == EngineType.SHERPA) sherpaEngine else systemEngine
+
+    private companion object {
+        // Within Media3's 10-minute foreground grace period, so resuming from the background is allowed.
+        const val SHAKE_WINDOW_MS = 5 * 60_000L
+    }
 }

@@ -41,6 +41,10 @@ class ReaderViewModel(
     fun setSleepAutoStart(enabled: Boolean) {
         viewModelScope.launch { settings.setSleepAutoStart(enabled) }
     }
+
+    fun setSleepShakeToResume(enabled: Boolean) {
+        viewModelScope.launch { settings.setSleepShakeToResume(enabled) }
+    }
     fun setSpeed(speed: Float) {
         viewModelScope.launch { settings.setSpeed(speed) }
     }

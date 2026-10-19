@@ -206,6 +206,7 @@ fun ReaderScreen(
                 showSleep = false
             },
             onAutoStartChange = viewModel::setSleepAutoStart,
+            onShakeToResumeChange = viewModel::setSleepShakeToResume,
             onDismiss = { showSleep = false },
         )
     }
@@ -422,6 +423,7 @@ private fun SleepTimerSheet(
     onStart: (Int) -> Unit,
     onTurnOff: () -> Unit,
     onAutoStartChange: (Boolean) -> Unit,
+    onShakeToResumeChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var minutes by remember { mutableFloatStateOf(prefs.minutes.coerceIn(SLEEP_MIN, SLEEP_MAX).toFloat()) }
@@ -465,6 +467,23 @@ private fun SleepTimerSheet(
             ) {
                 Text("Start automatically when I press Play", modifier = Modifier.weight(1f))
                 Switch(checked = prefs.autoStart, onCheckedChange = onAutoStartChange)
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onShakeToResumeChange(!prefs.shakeToResume) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Shake to keep listening")
+                    Text(
+                        "For 5 minutes after the timer stops, shake the phone to resume",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = prefs.shakeToResume, onCheckedChange = onShakeToResumeChange)
             }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
                 if (endsAt != null) TextButton(onClick = onTurnOff) { Text("Turn off") }

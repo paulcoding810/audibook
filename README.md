@@ -16,7 +16,7 @@ AudiBook is an Android app that turns your EPUB books into audiobooks. It reads 
   - **Google Text-to-Speech**: many languages. Offline voices are preferred automatically, with a fallback if an online voice fails.
   - **On-device AI voices**: [Piper](https://github.com/rhasspy/piper), Kitten and [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). They are downloaded in the app and run offline. Each is labelled **Light** (keeps up on any phone) or **Heavy** (more natural, needs a fast phone and more battery).
 - **Background listening**: playback continues with the screen off, with notification, lock-screen and headset controls. It pauses for calls and when headphones are unplugged.
-- **Sleep timer**: 5–120 minutes. It can start automatically whenever you press Play, and remembers your last choice.
+- **Sleep timer**: 5–120 minutes. It can start automatically whenever you press Play, and remembers your last choice. After it stops, **shake the phone** within 5 minutes to keep listening.
 - **Reading controls**: speed, pitch (Google voices), and chapter or sentence skipping.
 - **Picks up where you left off**: progress is saved per sentence, and the app reopens your last book.
 - **Light and dark theme**, with Material You colours.

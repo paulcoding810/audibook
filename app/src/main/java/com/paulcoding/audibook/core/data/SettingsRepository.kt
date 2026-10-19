@@ -25,6 +25,7 @@ data class TtsSettings(
 data class SleepPrefs(
     val minutes: Int = 30,
     val autoStart: Boolean = false,
+    val shakeToResume: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -61,12 +62,18 @@ class SettingsRepository(context: Context) {
     suspend fun setPitch(pitch: Float) = store.edit { it[PITCH] = pitch }
 
     val sleepPrefs: Flow<SleepPrefs> = store.data.map { prefs ->
-        SleepPrefs(minutes = prefs[SLEEP_MINUTES] ?: 30, autoStart = prefs[SLEEP_AUTO] ?: false)
+        SleepPrefs(
+            minutes = prefs[SLEEP_MINUTES] ?: 30,
+            autoStart = prefs[SLEEP_AUTO] ?: false,
+            shakeToResume = prefs[SLEEP_SHAKE] ?: true,
+        )
     }.distinctUntilChanged()
 
     suspend fun setSleepMinutes(minutes: Int) = store.edit { it[SLEEP_MINUTES] = minutes }
 
     suspend fun setSleepAutoStart(enabled: Boolean) = store.edit { it[SLEEP_AUTO] = enabled }
+
+    suspend fun setSleepShakeToResume(enabled: Boolean) = store.edit { it[SLEEP_SHAKE] = enabled }
 
     private companion object {
         val ENGINE = stringPreferencesKey("engine")
@@ -77,5 +84,6 @@ class SettingsRepository(context: Context) {
         val PITCH = floatPreferencesKey("pitch")
         val SLEEP_MINUTES = intPreferencesKey("sleep_minutes")
         val SLEEP_AUTO = booleanPreferencesKey("sleep_auto")
+        val SLEEP_SHAKE = booleanPreferencesKey("sleep_shake")
     }
 }
