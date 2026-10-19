@@ -54,7 +54,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run tests
-        run: ./gradlew testFossReleaseUnitTest
+        run: ./gradlew testFossDebugUnitTest
 
       - name: Build app
         run: ./gradlew assembleFossRelease
