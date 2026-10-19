@@ -86,6 +86,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.paulcoding.audibook.BuildConfig
 import com.paulcoding.audibook.core.data.SleepPrefs
 import com.paulcoding.audibook.core.epub.ChapterContent
 import com.paulcoding.audibook.core.epub.Paragraph
@@ -226,6 +227,10 @@ fun ReaderScreen(
             },
             onAutoStartChange = viewModel::setSleepAutoStart,
             onShakeToResumeChange = viewModel::setSleepShakeToResume,
+            onStartTest = {
+                viewModel.startTestSleepTimer()
+                showSleep = false
+            },
             onDismiss = { showSleep = false },
         )
     }
@@ -441,6 +446,7 @@ private fun SleepTimerSheet(
     onTurnOff: () -> Unit,
     onAutoStartChange: (Boolean) -> Unit,
     onShakeToResumeChange: (Boolean) -> Unit,
+    onStartTest: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var minutes by remember { mutableFloatStateOf(prefs.minutes.coerceIn(SLEEP_MIN, SLEEP_MAX).toFloat()) }
@@ -503,6 +509,7 @@ private fun SleepTimerSheet(
                 Switch(checked = prefs.shakeToResume, onCheckedChange = onShakeToResumeChange)
             }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                if (BuildConfig.DEBUG) TextButton(onClick = onStartTest) { Text("Test: 10 s") }
                 if (endsAt != null) TextButton(onClick = onTurnOff) { Text("Turn off") }
                 Button(onClick = { onStart(minutes.roundToInt()) }, modifier = Modifier.padding(start = 8.dp)) {
                     Text(if (endsAt != null) "Restart" else "Start")

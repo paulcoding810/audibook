@@ -190,30 +190,32 @@ class ReadAloudController(
         if (sentence > 0 || chapter == 0) seekTo(chapter, 0) else seekTo(chapter - 1, 0)
     }
 
-    fun setSleepTimer(minutes: Int?) {
+    fun setSleepTimer(minutes: Int?) = setSleepTimerMs(minutes?.times(60_000L))
+
+    /** Like [setSleepTimer] but in milliseconds; debug builds use it for a seconds-long test timer. */
+    fun setSleepTimerMs(durationMs: Long?) {
         sleepJob?.cancel()
-        if (minutes == null) {
+        if (durationMs == null) {
             _state.update { it.copy(sleepTimerEndsAt = null) }
             return
         }
-        val durationMs = minutes * 60_000L
         _state.update { it.copy(sleepTimerEndsAt = System.currentTimeMillis() + durationMs) }
         sleepJob = scope.launch {
             delay(durationMs)
             pause(byUser = false)
             _state.update { it.copy(sleepTimerEndsAt = null) }
-            if (sleepPrefs.shakeToResume) startShakeWindow(minutes)
+            if (sleepPrefs.shakeToResume) startShakeWindow(durationMs)
         }
     }
 
     /** After the sleep timer stops, a shake within [SHAKE_WINDOW_MS] resumes reading with the same timer. */
-    private fun startShakeWindow(minutes: Int) {
+    private fun startShakeWindow(timerMs: Long) {
         stopShakeWindow()
         if (!shake.isAvailable) return
         shake.start(SHAKE_WINDOW_MS) {
             stopShakeWindow()
             play()
-            if (_state.value.isPlaying) setSleepTimer(minutes)
+            if (_state.value.isPlaying) setSleepTimerMs(timerMs)
         }
         shakeWindowJob = scope.launch {
             delay(SHAKE_WINDOW_MS)

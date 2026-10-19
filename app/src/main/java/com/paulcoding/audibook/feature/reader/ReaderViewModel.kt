@@ -43,6 +43,8 @@ class ReaderViewModel(
         if (minutes != null) viewModelScope.launch { settings.setSleepMinutes(minutes) }
     }
 
+    fun startTestSleepTimer() = controller.setSleepTimerMs(10_000)
+
     fun setSleepAutoStart(enabled: Boolean) {
         viewModelScope.launch { settings.setSleepAutoStart(enabled) }
     }
