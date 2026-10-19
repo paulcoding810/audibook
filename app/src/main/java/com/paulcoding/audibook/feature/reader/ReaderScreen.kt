@@ -112,6 +112,7 @@ fun ReaderScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val speed by viewModel.speed.collectAsStateWithLifecycle()
+    val openFailed by viewModel.openFailed.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var showToc by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
@@ -181,7 +182,23 @@ fun ReaderScreen(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         val chapter = state.chapter
-        if (!ready || chapter == null) {
+        if (openFailed) {
+            Column(
+                Modifier.padding(padding).fillMaxSize().padding(32.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("This book can't be opened", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Its EPUB file isn't on this device. Re-add it from the library to continue.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+                TextButton(onClick = onBack) { Text("Back to library") }
+            }
+        } else if (!ready || chapter == null) {
             Box(Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
             ChapterText(

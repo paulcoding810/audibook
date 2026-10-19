@@ -51,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -60,8 +61,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.paulcoding.audibook.core.data.db.BookEntity
 import com.paulcoding.audibook.core.playback.PlaybackState
-import org.koin.androidx.compose.koinViewModel
 import java.io.File
+import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,6 +76,7 @@ fun LibraryScreen(
     val playback by viewModel.playback.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var pendingDelete by remember { mutableStateOf<BookEntity?>(null) }
+    var missingBook by remember { mutableStateOf<BookEntity?>(null) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::import)
@@ -118,12 +120,34 @@ fun LibraryScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
-                    items(books!!, key = { it.id }) { book ->
-                        BookCard(book, onClick = { onOpenBook(book.id) }, onLongClick = { pendingDelete = book })
+                    items(books!!, key = { it.book.id }) { item ->
+                        BookCard(
+                            book = item.book,
+                            missingFile = item.missingFile,
+                            onClick = { if (item.missingFile) missingBook = item.book else onOpenBook(item.book.id) },
+                            onLongClick = { pendingDelete = item.book },
+                        )
                     }
                 }
             }
         }
+    }
+
+    missingBook?.let { book ->
+        AlertDialog(
+            onDismissRequest = { missingBook = null },
+            title = { Text("Book file missing") },
+            text = {
+                Text("Your progress in \"${book.title}\" was restored, but the EPUB isn't on this device. Choose the same EPUB file to continue where you left off.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    missingBook = null
+                    picker.launch(arrayOf("application/epub+zip", "application/octet-stream"))
+                }) { Text("Choose file") }
+            },
+            dismissButton = { TextButton(onClick = { missingBook = null }) { Text("Cancel") } },
+        )
     }
 
     pendingDelete?.let { book ->
@@ -164,8 +188,12 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BookCard(book: BookEntity, onClick: () -> Unit, onLongClick: () -> Unit) {
-    Column(Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
+private fun BookCard(book: BookEntity, missingFile: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+    Column(
+        Modifier
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .alpha(if (missingFile) 0.6f else 1f)
+    ) {
         Box(
             Modifier
                 .fillMaxWidth()
@@ -174,7 +202,7 @@ private fun BookCard(book: BookEntity, onClick: () -> Unit, onLongClick: () -> U
                 .background(MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            if (book.coverPath != null) {
+            if (book.coverPath != null && File(book.coverPath).exists()) {
                 AsyncImage(
                     model = File(book.coverPath),
                     contentDescription = book.title,
@@ -191,7 +219,14 @@ private fun BookCard(book: BookEntity, onClick: () -> Unit, onLongClick: () -> U
                 )
             }
         }
-        if (book.lastReadAt != null) {
+        if (missingFile) {
+            Text(
+                "File missing · tap to re-add",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        } else if (book.lastReadAt != null) {
             LinearProgressIndicator(
                 progress = { book.progress },
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),

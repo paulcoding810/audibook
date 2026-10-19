@@ -2,6 +2,8 @@ package com.paulcoding.audibook.feature.settings
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -62,6 +65,7 @@ import com.paulcoding.audibook.core.tts.SystemVoice
 import com.paulcoding.audibook.core.tts.TtsModel
 import com.paulcoding.audibook.core.update.AppRelease
 import com.paulcoding.audibook.core.update.UpdateState
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -78,6 +82,13 @@ fun SettingsScreen(
     val snackbar = remember { SnackbarHostState() }
     var showVoices by remember { mutableStateOf(false) }
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val backupBusy by viewModel.backupBusy.collectAsStateWithLifecycle()
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        uri?.let(viewModel::exportBackup)
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::importBackup)
+    }
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -85,6 +96,9 @@ fun SettingsScreen(
     }
     LaunchedEffect(Unit) {
         viewModel.updateMessages.collect { snackbar.showSnackbar(it) }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.backupMessages.collect { snackbar.showSnackbar(it, withDismissAction = true, duration = SnackbarDuration.Long) }
     }
     val scope = rememberCoroutineScope()
     LaunchedEffect(updateState) {
@@ -171,6 +185,27 @@ fun SettingsScreen(
             }
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            SectionTitle("Backup")
+            ListItem(
+                headlineContent = { Text("Export library") },
+                supportingContent = { Text("Books, reading progress and settings in one .audibook file") },
+                modifier = Modifier.clickable(enabled = backupBusy == null) {
+                    exportLauncher.launch("AudiBook-${LocalDate.now()}.audibook")
+                },
+            )
+            ListItem(
+                headlineContent = { Text("Import backup") },
+                supportingContent = { Text("Restores books and progress, and merges with what's here") },
+                modifier = Modifier.clickable(enabled = backupBusy == null) { importLauncher.launch(arrayOf("*/*")) },
+            )
+            Text(
+                "Reading progress and settings are also backed up automatically with your Google account. Voice models aren't included.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionTitle("About")
             ListItem(
                 headlineContent = {
@@ -183,6 +218,15 @@ fun SettingsScreen(
                 modifier = Modifier.clickable(enabled = updateState == UpdateState.Idle, onClick = viewModel::checkForUpdate),
             )
         }
+    }
+
+    backupBusy?.let { label ->
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(label) },
+            text = { LinearProgressIndicator(Modifier.fillMaxWidth()) },
+            confirmButton = {},
+        )
     }
 
     when (val update = updateState) {

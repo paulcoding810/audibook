@@ -51,6 +51,13 @@ Single `app` module, Compose + Koin + Media3. Package `com.paulcoding.audibook`:
 - **Audio must play from this app's process.** Android picks the media-button session by which UID is producing audio. If the TTS engine's process plays the audio, headset and media keys don't reach the app.
 - **Automatic voice choice** prefers installed offline voices and ranks Google's `legacySetLanguageVoice` voices (e.g. `vi-VN-language`) last: they go network-first even though they report `isNetworkConnectionRequired = false`. If a network voice fails, the app falls back to an offline voice once; if none exists, it shows an actionable error.
 - The manifest needs `<queries>` for `android.intent.action.TTS_SERVICE` (API 30+ package visibility).
+- Books are identified by `fingerprint` (SHA-256 of the EPUB), not by `id`:
+  - Importing a file that's already present returns `AlreadyInLibrary`. A matching entry without its file gets the file reattached, keeping progress (`BookRepository.importFile`).
+  - A book's EPUB can be missing after a restore. Always check `BookEntity.hasFile` before opening one, as `ReadAloudController.open()` does, and never assume `filePath` exists.
+- Backups:
+  - `res/xml/data_extraction_rules.xml` and `backup_rules.xml` include only the database and settings in cloud backup (25 MB cap). Phone-to-phone transfer also copies books and covers. Voice models are never backed up.
+  - `core/backup/BackupManager` writes and reads `.audibook` files: a zip with `manifest.json` plus `books/<fingerprint>.epub`. When adding a setting, add it to `SettingsBackup`. When changing the manifest incompatibly, bump `BackupManifest.VERSION`.
+- Room schema changes need a `Migration` in `BookDatabase` (currently v2).
 - `ReadAloudController` guards against cancelled playback jobs changing state (`playJob !== self`). Keep that when touching play/seek/restart logic.
 - Pause stops synthesis. Resume restarts from the current sentence.
 - `ReadAloudController.pause(byUser)`: a pause the user asked for (UI, notification, headset) cancels the sleep timer; interruptions (audio focus loss, unplugged headphones, the timer itself, switching books, voice preview) pass `byUser = false` and keep it. With auto-start on, Play starts the timer using the saved duration.

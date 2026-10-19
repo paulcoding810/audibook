@@ -19,6 +19,7 @@ AudiBook is an Android app that turns your EPUB books into audiobooks. It reads 
 - **Sleep timer**: 5–120 minutes. It can start automatically whenever you press Play, and remembers your last choice. After it stops, **shake the phone** within 5 minutes to keep listening.
 - **Reading controls**: speed, pitch (Google voices), and chapter or sentence skipping.
 - **Picks up where you left off**: progress is saved per sentence, and the app reopens your last book.
+- **Backup and restore**: export your books, reading progress and settings to a single `.audibook` file, and import it on another phone. Progress and settings are also backed up automatically with your Google account; re-add an EPUB and you continue where you left off.
 - **Light and dark theme**, with Material You colours.
 
 ## Download

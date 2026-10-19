@@ -9,7 +9,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 
 enum class EngineType { SYSTEM, SHERPA }
 
@@ -26,6 +28,20 @@ data class SleepPrefs(
     val minutes: Int = 30,
     val autoStart: Boolean = false,
     val shakeToResume: Boolean = true,
+)
+
+/** Everything user-configurable, as stored in a `.audibook` backup. */
+@Serializable
+data class SettingsBackup(
+    val engine: String = EngineType.SYSTEM.name,
+    val systemVoice: String? = null,
+    val sherpaModelId: String? = null,
+    val sherpaSpeaker: Int = 0,
+    val speed: Float = 1f,
+    val pitch: Float = 1f,
+    val sleepMinutes: Int = 30,
+    val sleepAutoStart: Boolean = false,
+    val sleepShakeToResume: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -74,6 +90,34 @@ class SettingsRepository(context: Context) {
     suspend fun setSleepAutoStart(enabled: Boolean) = store.edit { it[SLEEP_AUTO] = enabled }
 
     suspend fun setSleepShakeToResume(enabled: Boolean) = store.edit { it[SLEEP_SHAKE] = enabled }
+
+    suspend fun exportSettings(): SettingsBackup {
+        val tts = settings.first()
+        val sleep = sleepPrefs.first()
+        return SettingsBackup(
+            engine = tts.engine.name,
+            systemVoice = tts.systemVoice,
+            sherpaModelId = tts.sherpaModelId,
+            sherpaSpeaker = tts.sherpaSpeaker,
+            speed = tts.speed,
+            pitch = tts.pitch,
+            sleepMinutes = sleep.minutes,
+            sleepAutoStart = sleep.autoStart,
+            sleepShakeToResume = sleep.shakeToResume,
+        )
+    }
+
+    suspend fun importSettings(backup: SettingsBackup) = store.edit {
+        it[ENGINE] = backup.engine
+        if (backup.systemVoice == null) it.remove(SYSTEM_VOICE) else it[SYSTEM_VOICE] = backup.systemVoice
+        if (backup.sherpaModelId == null) it.remove(SHERPA_MODEL) else it[SHERPA_MODEL] = backup.sherpaModelId
+        it[SHERPA_SPEAKER] = backup.sherpaSpeaker
+        it[SPEED] = backup.speed
+        it[PITCH] = backup.pitch
+        it[SLEEP_MINUTES] = backup.sleepMinutes
+        it[SLEEP_AUTO] = backup.sleepAutoStart
+        it[SLEEP_SHAKE] = backup.sleepShakeToResume
+    }
 
     private companion object {
         val ENGINE = stringPreferencesKey("engine")

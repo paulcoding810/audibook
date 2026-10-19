@@ -5,6 +5,7 @@ import com.paulcoding.audibook.core.data.BookRepository
 import com.paulcoding.audibook.core.data.EngineType
 import com.paulcoding.audibook.core.data.SettingsRepository
 import com.paulcoding.audibook.core.data.SleepPrefs
+import com.paulcoding.audibook.core.data.hasFile
 import com.paulcoding.audibook.core.data.TtsSettings
 import com.paulcoding.audibook.core.data.db.BookEntity
 import com.paulcoding.audibook.core.epub.ChapterContent
@@ -89,12 +90,19 @@ class ReadAloudController(
         }
     }
 
-    suspend fun open(bookId: String) {
-        if (_state.value.book?.id == bookId) return
-        val book = books.getBook(bookId) ?: return
+    /** Loads [bookId] for reading; returns false if it can't be opened (e.g. its EPUB is missing after a restore). */
+    suspend fun open(bookId: String): Boolean {
+        if (_state.value.book?.id == bookId) return true
+        val book = books.getBook(bookId) ?: return false
+        if (!book.hasFile) return false
         pause(byUser = false)
         stopShakeWindow()
-        val chapters = books.chapters(book)
+        val chapters = try {
+            books.chapters(book)
+        } catch (e: Exception) {
+            _errors.tryEmit("Couldn't open this book: ${e.message}")
+            return false
+        }
         var chapterIndex = book.chapterIndex.coerceIn(0, chapters.lastIndex)
         var content = books.chapter(book, chapterIndex)
         while (content.sentences.isEmpty() && chapterIndex < chapters.lastIndex) {
@@ -102,6 +110,7 @@ class ReadAloudController(
         }
         val sentence = book.sentenceIndex.coerceIn(0, (content.sentences.size - 1).coerceAtLeast(0))
         _state.value = PlaybackState(book, chapters, content, Position(chapterIndex, sentence))
+        return true
     }
 
     fun close(bookId: String) {
