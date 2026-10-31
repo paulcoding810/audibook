@@ -106,8 +106,13 @@ class ModelManager(dirs: AppDirs, private val client: HttpClient) {
     fun speakerCount(id: String): Int =
         model(id)?.speakers?.takeIf { it > 0 } ?: File(dir(id), SPEAKERS).takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull() ?: 0
 
+    private val _learnedSpeakers = MutableStateFlow<Map<String, Int>>(emptyMap())
+    /** Changes whenever a model reports its speaker count on load, so screens can show speaker options right away. */
+    val learnedSpeakers: StateFlow<Map<String, Int>> = _learnedSpeakers.asStateFlow()
+
     fun rememberSpeakerCount(id: String, count: Int) {
         runCatching { File(dir(id), SPEAKERS).writeText(count.toString()) }
+        _learnedSpeakers.update { it + (id to count) }
     }
 
     /** Refreshes the downloadable voice list from the sherpa-onnx release, at most once a day unless [force]d. */

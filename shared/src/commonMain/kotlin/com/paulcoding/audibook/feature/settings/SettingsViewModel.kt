@@ -108,6 +108,7 @@ class SettingsViewModel(
 
     /** Number of speakers in [id], known from the catalog or learned when the model was first loaded (0 = unknown). */
     fun speakerCount(id: String) = models.speakerCount(id)
+    val learnedSpeakers = models.learnedSpeakers
 
     fun setEngine(engine: EngineType) = launch { settings.setEngine(engine) }
     fun setSystemVoice(name: String?) = launch { settings.setSystemVoice(name) }

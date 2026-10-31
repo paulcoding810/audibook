@@ -309,7 +309,8 @@ private fun SherpaSection(
         Text("Download voice models")
     }
     val model = viewModel.model(current.sherpaModelId)
-    val speakers = model?.let { viewModel.speakerCount(it.id) } ?: 0
+    val learnedSpeakers by viewModel.learnedSpeakers.collectAsStateWithLifecycle()
+    val speakers = model?.let { learnedSpeakers[it.id] ?: viewModel.speakerCount(it.id) } ?: 0
     if (model != null && speakers > 1 && installed.any { it.id == model.id }) {
         var speaker by remember(current.sherpaSpeaker, model.id) { mutableFloatStateOf(current.sherpaSpeaker.toFloat()) }
         Column(Modifier.padding(horizontal = 16.dp)) {
