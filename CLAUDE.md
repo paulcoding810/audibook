@@ -1,22 +1,31 @@
 # AudiBook
 
-Android app that imports EPUBs and reads them aloud with Google TTS or on-device neural voices (sherpa-onnx), highlighting the sentence being spoken.
+Android and desktop (Compose Multiplatform) app that imports EPUBs and reads them aloud with Google TTS or on-device neural voices (sherpa-onnx), highlighting the sentence being spoken.
 
 ## Build & test
 
 ```sh
-./gradlew :app:testFossDebugUnitTest   # JVM unit tests (parser, splitter, WAV decoder, update logic)
+./gradlew :shared:desktopTest          # JVM unit tests (parser, splitter, WAV decoder, catalog, update logic)
 ./gradlew :app:assembleFossDebug
 ./gradlew :app:installFossDebug
+./gradlew :desktop:run                 # desktop app
+./gradlew :desktop:packageDmg          # or packageMsi / packageDeb, on that OS
 ```
+
+- Modules:
+  - `shared`: KMP library (targets `android` and `jvm("desktop")`) with nearly all code, UI included. Because both targets are JVMs, `commonMain` may use JDK APIs (`java.io.File`, `ZipFile`, `BreakIterator`, Jsoup). An iOS target would have to replace those first.
+  - `app`: the Android app. It holds the Android implementations (`SystemTtsEngine`, `AudioTrackOutput`, `AndroidSherpaLoader`, `AndroidAudioFocus`, `ShakeDetector`, Media3), `androidModule` in `core/di/AppModule.kt`, and the flavors.
+  - `desktop`: just `Main.kt`. Desktop implementations live in `shared/src/desktopMain` (`desktopModule`).
+- Platform seams are interfaces in `shared` that each platform's Koin module binds (listed on `sharedModules`): `SystemSpeechEngine`, `SherpaLoader`, `PcmOutputFactory`, `AudioFocusFactory`, `ShakeSensor`, `AppUpdater`, plus `AppDirs`, `AppInfo`, `BookDatabase` and the settings `DataStore`. File pickers and dynamic color are `expect`/`actual` composables in `core/ui/PlatformUi.kt`.
+- Compose Multiplatform is pinned to 1.11.x (lifecycle 2.10, navigation 2.9, Coil 3.3). CMP 1.12 pulls androidx Compose 1.12 and navigation 2.10, which need compileSdk 37 and AGP 9.1+.
 
 - Two product flavors (dimension `distribution`):
   - `foss` is the GitHub build. It has the in-app updater (`src/foss`: `GitHubAppUpdater`, `REQUEST_INSTALL_PACKAGES`, a FileProvider).
   - `gplay` is the Play build. It has no self-update code or install permission; "Check for updates" just opens the Play listing.
   - Each flavor binds `AppUpdater` in its own `core/di/FlavorModule.kt`. Never add self-update code or the install permission to `src/main`.
 - AGP 9 with built-in Kotlin (no `kotlin-android` plugin). Compiled classes land in `app/build/intermediates/built_in_kotlinc/`, not `tmp/kotlin-classes`.
-- Room uses KSP. Dependency versions live in `gradle/libs.versions.toml`.
-- sherpa-onnx comes from JitPack (`com.github.k2-fsa.sherpa-onnx:sherpa-onnx`, AAR). The JitPack repo in `settings.gradle.kts` is restricted to that group.
+- Room (KMP) uses KSP in `shared` (`kspAndroid` + `kspDesktop`); desktop uses the bundled SQLite driver. Dependency versions live in `gradle/libs.versions.toml`.
+- sherpa-onnx comes from JitPack (`com.github.k2-fsa.sherpa-onnx:sherpa-onnx`, AAR). The JitPack repo in `settings.gradle.kts` is restricted to that group. Desktop uses the sherpa-onnx JVM jar plus a per-OS native-lib jar, fetched from GitHub release assets through an Ivy repo in `settings.gradle.kts`; `desktop/build.gradle.kts` picks the native jar for the building machine, so build each desktop installer on its own OS. The JVM jar's API differs from the AAR's (Java builders), hence the two `SherpaLoader`s.
 - ABI splits produce one APK per ABI (~40–55 MB release, mostly sherpa-onnx native libs) plus a universal APK (~140 MB). Install the matching one, e.g. `app/build/outputs/apk/foss/debug/app-foss-arm64-v8a-debug.apk`.
 - Release builds use R8 (`isMinifyEnabled` + `isShrinkResources`). sherpa-onnx's native code accesses its Kotlin config classes by name, and its AAR ships no rules, so `proguard-rules.pro` keeps `com.k2fsa.sherpa.onnx.**`. After dependency changes, smoke-test a release build: an AI voice, Google TTS, and an update check against a real release.
 - ABI splits are disabled automatically for `bundle*` tasks, because AGP 9 rejects ABI splits combined with resource shrinking when building an AAB, and Play splits by ABI itself.
@@ -30,20 +39,20 @@ Android app that imports EPUBs and reads them aloud with Google TTS or on-device
 
 ## Architecture
 
-Single `app` module, Compose + Koin + Media3. Package `com.paulcoding.audibook`:
+Compose Multiplatform + Koin, Media3 on Android. Package `com.paulcoding.audibook` (in `shared` unless noted):
 
 - `core/epub`: dependency-free EPUB parsing (`ZipFile` + Jsoup) into chapters → paragraphs → sentences. `SentenceSplitter` uses `java.text.BreakIterator`, not ICU, so it runs in JVM unit tests. Sentences are capped at 300 chars.
 - `core/data`: Room `books` table (reading progress is stored as columns on it), DataStore `TtsSettings`, and `BookRepository` (import, parser + chapter LRU cache).
 - `core/tts`: the `SpeechEngine` interface. Both engines render PCM ahead and play it through `playPipelined()` in `PcmPipeline.kt`.
-  - `SystemTtsEngine`: Google TTS via `synthesizeToFile()`, then `WavReader`.
+  - `SystemTtsEngine` (`app`): Google TTS via `synthesizeToFile()`, then `WavReader`. `DesktopSystemTtsEngine` runs `say` (macOS), SAPI via PowerShell (Windows) or espeak-ng (Linux) to a WAV file.
   - `SherpaTtsEngine`: sherpa-onnx `OfflineTts` on a single dedicated thread.
   - `ModelManager`: model catalog, download, and tar.bz2 extraction.
 - `core/playback`:
   - `ReadAloudController`: the single source of truth for what's being read. Main-thread only.
-  - `TtsPlayer`: a Media3 `SimpleBasePlayer` adapter.
-  - `PlaybackService`: the `MediaSessionService`.
-  - `AudioFocus`: audio focus and headphone-unplug ("becoming noisy") handling.
-- `feature/{library,reader,settings}`: screens + ViewModels. Routes are typed in `core/ui/Routes.kt`; DI lives in `core/di/AppModule.kt` and `ViewModelModule.kt`.
+  - `TtsPlayer` (`app`): a Media3 `SimpleBasePlayer` adapter.
+  - `PlaybackService` (`app`): the `MediaSessionService`.
+  - `AndroidAudioFocus` (`app`): audio focus and headphone-unplug ("becoming noisy") handling.
+- `feature/{library,reader,settings}`: screens + ViewModels. Routes are typed in `core/ui/Routes.kt`; the nav graph is `AudiBookApp.kt`; DI lives in `core/di/SharedModules.kt` and `ViewModelModule.kt`.
 
 ## Non-obvious decisions (don't undo without reason)
 
@@ -57,7 +66,7 @@ Single `app` module, Compose + Koin + Media3. Package `com.paulcoding.audibook`:
 - Backups:
   - `res/xml/data_extraction_rules.xml` and `backup_rules.xml` include only the database and settings in cloud backup (25 MB cap). Phone-to-phone transfer also copies books and covers. Voice models are never backed up.
   - `core/backup/BackupManager` writes and reads `.audibook` files: a zip with `manifest.json` plus `books/<fingerprint>.epub`. When adding a setting, add it to `SettingsBackup`. When changing the manifest incompatibly, bump `BackupManifest.VERSION`.
-- Room schema changes need a `Migration` in `BookDatabase` (currently v2).
+- Room schema changes need a `Migration` (currently v2). Android migrations live in `app/.../core/data/db/Migrations.kt` because Room on Android without a driver calls `migrate(SupportSQLiteDatabase)`; desktop would need `migrate(SQLiteConnection)` versions once a desktop schema has shipped.
 - `ReadAloudController` guards against cancelled playback jobs changing state (`playJob !== self`). Keep that when touching play/seek/restart logic.
 - Pause stops synthesis. Resume restarts from the current sentence.
 - The voice catalog is dynamic:

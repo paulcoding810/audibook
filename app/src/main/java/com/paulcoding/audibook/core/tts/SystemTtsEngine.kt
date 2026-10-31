@@ -1,6 +1,8 @@
 package com.paulcoding.audibook.core.tts
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -17,18 +19,22 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-data class SystemVoice(
-    val name: String,
-    val locale: Locale,
-    val requiresNetwork: Boolean,
-    val quality: Int,
-)
-
 /**
  * Renders sentences ahead with [TextToSpeech.synthesizeToFile] and plays them itself, because the
  * framework's speak() queue only synthesizes ~500 ms ahead and leaves gaps on slower devices.
  */
-class SystemTtsEngine(private val context: Context) : SpeechEngine {
+class SystemTtsEngine(private val context: Context) : SystemSpeechEngine {
+    override val name = "Google Text-to-Speech"
+    override val description = "Your device's speech engine. Supports many languages; some voices need internet."
+    override val supportsPitch = true
+
+    override val openSettings: () -> Unit = {
+        try {
+            context.startActivity(Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: ActivityNotFoundException) {
+        }
+    }
+
     private var tts: TextToSpeech? = null
     private val initMutex = Mutex()
     private val counter = AtomicLong()
@@ -37,7 +43,7 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
 
     private class VoiceFailure(val code: Int) : Exception()
 
-    suspend fun voices(): List<SystemVoice> = engine().voices.orEmpty()
+    override suspend fun voices(): List<SystemVoice> = engine().voices.orEmpty()
         .filter { TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features }
         .map { SystemVoice(it.name, it.locale, it.isNetworkConnectionRequired, it.quality) }
         .sortedWith(compareBy({ it.locale.displayName }, { it.name }))
@@ -71,7 +77,7 @@ class SystemTtsEngine(private val context: Context) : SpeechEngine {
         }
 
         try {
-            playPipelined(first, next, onStart, BUFFERED_SENTENCES, Dispatchers.Main.immediate) { render(it.text) }
+            playPipelined(first, next, onStart, BUFFERED_SENTENCES, ::AudioTrackOutput, Dispatchers.Main.immediate) { render(it.text) }
         } finally {
             tts.stop()
             pending.values.forEach { it.cancel() }

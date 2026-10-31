@@ -4,7 +4,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp)
 }
 
 val keystoreProperties = Properties().apply {
@@ -84,43 +83,28 @@ android {
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons.extended)
 
     implementation(platform(libs.koin.bom))
-    implementation(libs.koin.compose)
+    implementation(libs.koin.android)
 
-    implementation(libs.androidx.navigation.compose)
-
-    api(libs.ktor.core)
     implementation(libs.ktor.android)
-    implementation(libs.ktor.client.logging)
     implementation(libs.slf4j.simple)
-
-    implementation(libs.ktor.serialization)
-    implementation(libs.ktor.serialization.json)
-    implementation(libs.kotlinx.coroutine.core)
     implementation(libs.kotlinx.serialization.json)
 
     implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
-
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.common)
-    implementation(libs.coil.compose)
 
-    implementation(libs.jsoup)
-    implementation(libs.commons.compress)
     implementation(libs.sherpa.onnx) { artifact { type = "aar" } }
 
     testImplementation(libs.junit)

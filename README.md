@@ -52,7 +52,8 @@ To get more Google voices, open Settings → Install more voices. Download the o
 
 ```sh
 ./gradlew :app:installFossDebug        # GitHub build on a connected device
-./gradlew :app:testFossDebugUnitTest   # unit tests
+./gradlew :shared:desktopTest          # unit tests
+./gradlew :desktop:run                 # desktop app (macOS, Windows, Linux)
 ```
 
 There are two product flavors:

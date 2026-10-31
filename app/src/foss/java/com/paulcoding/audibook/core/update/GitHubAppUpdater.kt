@@ -74,7 +74,7 @@ class GitHubAppUpdater(
             _state.value = UpdateState.Downloading(release, null)
             try {
                 val apk = File(context.cacheDir, "updates/AudiBook-update.apk")
-                client.downloadTo(release.apkUrl, apk) { _state.value = UpdateState.Downloading(release, it) }
+                client.downloadTo(release.url, apk) { _state.value = UpdateState.Downloading(release, it) }
                 install(apk)
                 _state.value = UpdateState.Idle
             } catch (e: CancellationException) {
@@ -101,7 +101,7 @@ class GitHubAppUpdater(
         return AppRelease(
             version = release.tagName.removePrefix("v"),
             notes = plainReleaseNotes(release.body.orEmpty()),
-            apkUrl = release.assets.first { it.name == apk }.downloadUrl,
+            url = release.assets.first { it.name == apk }.downloadUrl,
         )
     }
 

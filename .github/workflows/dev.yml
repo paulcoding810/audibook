@@ -34,7 +34,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run tests
-        run: ./gradlew testFossDebugUnitTest testGplayDebugUnitTest
+        run: ./gradlew :shared:desktopTest testFossDebugUnitTest testGplayDebugUnitTest
 
       - name: Build app
         run: ./gradlew assembleFossDebug
