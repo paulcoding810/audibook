@@ -25,6 +25,8 @@ data class Paragraph(
     val isHeading: Boolean,
     val firstSentence: Int,
     val sentenceCount: Int,
+    /** Chapter this paragraph links to when it's essentially one link, e.g. an entry on a contents page. */
+    val target: Int? = null,
 )
 
 data class ChapterContent(

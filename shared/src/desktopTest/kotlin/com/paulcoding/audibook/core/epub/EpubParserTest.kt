@@ -168,6 +168,65 @@ class EpubParserTest {
     }
 
     @Test
+    fun contentsEntriesLinkToTheirChapter() {
+        val file = epub(
+            mapOf(
+                "META-INF/container.xml" to container,
+                "OEBPS/content.opf" to """
+                    <?xml version="1.0"?>
+                    <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+                      <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Linked</dc:title></metadata>
+                      <manifest>
+                        <item id="toc" href="text/toc.xhtml" media-type="application/xhtml+xml"/>
+                        <item id="c1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>
+                        <item id="c2" href="text/ch2.xhtml" media-type="application/xhtml+xml"/>
+                        <item id="c3" href="text/ch3.xhtml" media-type="application/xhtml+xml"/>
+                        <item id="notes" href="text/notes.xhtml" media-type="application/xhtml+xml"/>
+                      </manifest>
+                      <spine>
+                        <itemref idref="toc"/><itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/><itemref idref="notes" linear="no"/>
+                      </spine>
+                    </package>
+                """.trimIndent(),
+                "OEBPS/text/toc.xhtml" to xhtml(
+                    """<h1>Contents</h1>
+                       <ol>
+                         <li><a href="ch1.xhtml">Chapter One</a></li>
+                         <li><a href="ch2.xhtml#start">Chapter Two</a>
+                           <ol><li><a href="ch2.xhtml#sub">Section 2.1</a></li></ol></li>
+                         <li>3. <a href="ch3.xhtml">The Long Title of Three</a></li>
+                         <li><a href="toc.xhtml#top">Back to top</a></li>
+                         <li><a href="https://example.com/ch1.xhtml">Website</a></li>
+                         <li><a href="notes.xhtml">Notes</a></li>
+                       </ol>
+                       <p>See <a href="ch1.xhtml">chapter one</a> for the full story of how it all began long ago.</p>"""
+                ),
+                "OEBPS/text/ch1.xhtml" to xhtml("<p>One.</p>"),
+                "OEBPS/text/ch2.xhtml" to xhtml("<p>Two.</p>"),
+                "OEBPS/text/ch3.xhtml" to xhtml("<p>Three.</p>"),
+                "OEBPS/text/notes.xhtml" to xhtml("<p>Notes.</p>"),
+            ),
+        )
+        EpubParser(file).use { parser ->
+            val toc = parser.readChapter(parser.book.chapters[0])
+            assertEquals(
+                listOf(
+                    "Contents" to null,
+                    "Chapter One" to 1,
+                    "Chapter Two" to 2,
+                    "Section 2.1" to 2,
+                    "3. The Long Title of Three" to 3,
+                    "Back to top" to null,
+                    "Website" to null,
+                    "Notes" to null,
+                    "See chapter one for the full story of how it all began long ago." to null,
+                ),
+                toc.paragraphs.map { it.text to it.target },
+            )
+        }
+    }
+
+    @Test
     fun resolvesRelativePaths() {
         assertEquals("OEBPS/images/a.png", EpubParser.resolve("OEBPS/text", "../images/a.png"))
         assertEquals("a b.html", EpubParser.resolve("", "a%20b.html"))

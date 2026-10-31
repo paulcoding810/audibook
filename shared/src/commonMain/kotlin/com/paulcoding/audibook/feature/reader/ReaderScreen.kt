@@ -324,10 +324,19 @@ private fun ChapterText(
                 }
             }
             itemsIndexed(chapter.paragraphs, key = { index, _ -> "${chapter.index}:$index" }) { _, paragraph ->
-                ParagraphText(paragraph, chapter, currentSentence) {
-                    follow = true
-                    onSentenceClick(it)
-                }
+                ParagraphText(
+                    paragraph,
+                    chapter,
+                    currentSentence,
+                    onSentenceClick = {
+                        follow = true
+                        onSentenceClick(it)
+                    },
+                    onOpenTarget = {
+                        follow = true
+                        onOpenChapter(it, 0)
+                    },
+                )
             }
             if (chapter.paragraphs.isEmpty()) {
                 item {
@@ -410,29 +419,40 @@ private fun ParagraphText(
     chapter: ChapterContent,
     currentSentence: Int,
     onSentenceClick: (Int) -> Unit,
+    onOpenTarget: (chapter: Int) -> Unit,
 ) {
     val highlight = MaterialTheme.colorScheme.primaryContainer
+    val linkColor = MaterialTheme.colorScheme.primary
     val onHighlight = MaterialTheme.colorScheme.onPrimaryContainer
     val range = paragraph.firstSentence until paragraph.firstSentence + paragraph.sentenceCount
     val active = currentSentence.takeIf { it in range } ?: -1
-    val text: AnnotatedString = remember(paragraph, active, highlight) {
+    val text: AnnotatedString = remember(paragraph, active, highlight, linkColor) {
         buildAnnotatedString {
-            var cursor = 0
-            for (index in range) {
-                val sentence = chapter.sentences[index]
-                append(paragraph.text.substring(cursor, sentence.range.first))
-                withLink(LinkAnnotation.Clickable("s$index", plainLink) { onSentenceClick(index) }) {
-                    if (index == active) {
-                        withStyle(SpanStyle(background = highlight, color = onHighlight)) {
+            fun appendSentences() {
+                var cursor = 0
+                for (index in range) {
+                    val sentence = chapter.sentences[index]
+                    append(paragraph.text.substring(cursor, sentence.range.first))
+                    val styled: () -> Unit = {
+                        if (index == active) {
+                            withStyle(SpanStyle(background = highlight, color = onHighlight)) { append(sentence.text) }
+                        } else {
                             append(sentence.text)
                         }
-                    } else {
-                        append(sentence.text)
                     }
+                    // A contents entry is one link to its chapter, so its sentences aren't separately tappable.
+                    if (paragraph.target != null) styled() else withLink(LinkAnnotation.Clickable("s$index", plainLink) { onSentenceClick(index) }) { styled() }
+                    cursor = sentence.range.last + 1
                 }
-                cursor = sentence.range.last + 1
+                append(paragraph.text.substring(cursor))
             }
-            append(paragraph.text.substring(cursor))
+
+            val target = paragraph.target
+            if (target != null) {
+                withLink(LinkAnnotation.Clickable("c$target", TextLinkStyles(SpanStyle(color = linkColor))) { onOpenTarget(target) }) { appendSentences() }
+            } else {
+                appendSentences()
+            }
         }
     }
     Text(

@@ -26,15 +26,23 @@ class EpubParser(file: File) : Closeable {
         val locale = book.language?.let(Locale::forLanguageTag) ?: Locale.getDefault()
         val paragraphs = mutableListOf<Paragraph>()
         val sentences = mutableListOf<Sentence>()
-        extractBlocks(html).forEach { block ->
+        val dir = ref.href.substringBeforeLast('/', "")
+        val linkTarget = { href: String ->
+            href.takeUnless { urlScheme.containsMatchIn(it) }?.substringBefore('#')?.takeIf { it.isNotEmpty() }
+                ?.let { chapterIndexByHref[resolve(dir, it)] }
+                ?.takeIf { it != ref.index }
+        }
+        extractBlocks(html, linkTarget).forEach { block ->
             val ranges = SentenceSplitter.split(block.text, locale)
             if (ranges.isEmpty()) return@forEach
             val paragraphIndex = paragraphs.size
-            paragraphs += Paragraph(block.text, block.isHeading, sentences.size, ranges.size)
+            paragraphs += Paragraph(block.text, block.isHeading, sentences.size, ranges.size, block.target)
             ranges.forEach { sentences += Sentence(block.text.substring(it), paragraphIndex, it) }
         }
         return ChapterContent(ref.index, ref.title, paragraphs, sentences)
     }
+
+    private val chapterIndexByHref by lazy { book.chapters.associate { it.href to it.index } }
 
     override fun close() = zip.close()
 
@@ -120,7 +128,7 @@ class EpubParser(file: File) : Closeable {
 
     private data class ManifestItem(val href: String, val mediaType: String, val properties: Set<String>)
 
-    private data class Block(val text: String, val isHeading: Boolean)
+    private data class Block(val text: String, val isHeading: Boolean, val target: Int?)
 
     companion object {
         private val blockTags = setOf(
@@ -130,6 +138,7 @@ class EpubParser(file: File) : Closeable {
         private val headingTags = setOf("h1", "h2", "h3", "h4", "h5", "h6")
         private val skipTags = setOf("script", "style", "head", "title", "svg", "math", "rt", "rp")
         private val whitespace = Regex("[\\s\\u00A0\\u200B]+")
+        private val urlScheme = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:")
 
         fun resolve(baseDir: String, href: String): String {
             val decoded = runCatching { URLDecoder.decode(href.replace("+", "%2B"), "UTF-8") }.getOrDefault(href)
@@ -151,28 +160,47 @@ class EpubParser(file: File) : Closeable {
             return element.tagName() == "sup" && element.selectFirst("a") != null
         }
 
-        private fun extractBlocks(html: String): List<Block> {
+        /** Splits [html] into text blocks; [linkTarget] maps a link's href to a chapter index, or null if it isn't one. */
+        private fun extractBlocks(html: String, linkTarget: (String) -> Int?): List<Block> {
             val body = Jsoup.parse(html).body()
             val blocks = mutableListOf<Block>()
             val buffer = StringBuilder()
             var headingDepth = 0
+            var link: Element? = null
+            var currentTarget: Int? = null
+            val targets = mutableSetOf<Int?>()
+            var linkedChars = 0
 
             fun flush() {
                 val text = buffer.toString().replace(whitespace, " ").trim()
-                if (text.isNotEmpty()) blocks += Block(text, headingDepth > 0)
+                // A block counts as a link when one chapter link makes up most of its text (allowing e.g. "3. " before it).
+                val target = targets.singleOrNull()?.takeIf { linkedChars * 10 >= text.count { !it.isWhitespace() } * 6 }
+                if (text.isNotEmpty()) blocks += Block(text, headingDepth > 0, target)
                 buffer.clear()
+                targets.clear()
+                linkedChars = 0
             }
 
             body.filter(object : NodeFilter {
                 override fun head(node: Node, depth: Int): NodeFilter.FilterResult {
                     when (node) {
-                        is TextNode -> buffer.append(node.wholeText)
+                        is TextNode -> {
+                            buffer.append(node.wholeText)
+                            if (link != null) {
+                                targets += currentTarget
+                                linkedChars += node.wholeText.count { !it.isWhitespace() && it != '\u00A0' && it != '\u200B' }
+                            }
+                        }
                         is Element -> {
                             val tag = node.normalName()
                             if (tag in skipTags || isNoteRef(node)) return NodeFilter.FilterResult.SKIP_ENTIRELY
                             if (tag == "br") flush()
                             if (tag in blockTags) flush()
                             if (tag in headingTags) headingDepth++
+                            if (tag == "a" && node.hasAttr("href") && link == null) {
+                                link = node
+                                currentTarget = linkTarget(node.attr("href"))
+                            }
                         }
                     }
                     return NodeFilter.FilterResult.CONTINUE
@@ -183,6 +211,7 @@ class EpubParser(file: File) : Closeable {
                         val tag = node.normalName()
                         if (tag in blockTags) flush()
                         if (tag in headingTags) headingDepth--
+                        if (node === link) link = null
                     }
                     return NodeFilter.FilterResult.CONTINUE
                 }

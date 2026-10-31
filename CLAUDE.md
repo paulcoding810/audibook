@@ -41,7 +41,7 @@ Android and desktop (Compose Multiplatform) app that imports EPUBs and reads the
 
 Compose Multiplatform + Koin, Media3 on Android. Package `com.paulcoding.audibook` (in `shared` unless noted):
 
-- `core/epub`: dependency-free EPUB parsing (`ZipFile` + Jsoup) into chapters → paragraphs → sentences. `SentenceSplitter` uses `java.text.BreakIterator`, not ICU, so it runs in JVM unit tests. Sentences are capped at 300 chars.
+- `core/epub`: dependency-free EPUB parsing (`ZipFile` + Jsoup) into chapters → paragraphs → sentences. `SentenceSplitter` uses `java.text.BreakIterator`, not ICU, so it runs in JVM unit tests. Sentences are capped at 300 chars. A block that is essentially one link to another spine chapter (a contents entry) gets `Paragraph.target`; the reader renders it as a link that opens that chapter instead of seeking to its sentences. Fragments (`#id`) aren't resolved yet, so it opens the chapter's start.
 - `core/data`: Room `books` table (reading progress is stored as columns on it), DataStore `TtsSettings`, and `BookRepository` (import, parser + chapter LRU cache).
 - `core/tts`: the `SpeechEngine` interface. Both engines render PCM ahead and play it through `playPipelined()` in `PcmPipeline.kt`.
   - `SystemTtsEngine` (`app`): Google TTS via `synthesizeToFile()`, then `WavReader`. `DesktopSystemTtsEngine` runs `say` (macOS), SAPI via PowerShell (Windows) or espeak-ng (Linux) to a WAV file.
