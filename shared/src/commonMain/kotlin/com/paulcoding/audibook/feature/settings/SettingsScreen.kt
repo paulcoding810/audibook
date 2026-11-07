@@ -35,6 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -175,6 +176,12 @@ fun SettingsScreen(
                 Spacer(Modifier.padding(4.dp))
                 Text("Play sample")
             }
+            ListItem(
+                headlineContent = { Text("Skip contents and license pages") },
+                supportingContent = { Text("Don't read contents lists or Project Gutenberg license text aloud") },
+                trailingContent = { Switch(checked = current.skipFiller, onCheckedChange = null) },
+                modifier = Modifier.clickable { viewModel.setSkipFiller(!current.skipFiller) },
+            )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionTitle("Backup")

@@ -106,7 +106,15 @@ class ReadAloudController(
         while (content.sentences.isEmpty() && chapterIndex < chapters.lastIndex) {
             content = books.chapter(book, ++chapterIndex)
         }
-        val sentence = book.sentenceIndex.coerceIn(0, (content.sentences.size - 1).coerceAtLeast(0))
+        var sentence = book.sentenceIndex.coerceIn(0, (content.sentences.size - 1).coerceAtLeast(0))
+        // A book never read before starts at its first real text, past license pages and contents.
+        if (book.lastReadAt == null && settings.settings.first().skipFiller) {
+            utteranceAt(book, chapterIndex, sentence, skipFiller = true)?.let { first ->
+                if (first.chapter != chapterIndex) content = books.chapter(book, first.chapter)
+                chapterIndex = first.chapter
+                sentence = first.sentence
+            }
+        }
         _state.value = PlaybackState(book, chapters, content, Position(chapterIndex, sentence))
         return true
     }
@@ -272,7 +280,8 @@ class ReadAloudController(
             if (first != null) {
                 val current = settings.settings.first()
                 _state.update { it.copy(isBuffering = true) }
-                engineFor(current).speak(first, current, book.language, { utteranceAt(book, it.chapter, it.sentence + 1) }) {
+                // The first sentence is exactly where the user is; filler is skipped only from there on.
+                engineFor(current).speak(first, current, book.language, { utteranceAt(book, it.chapter, it.sentence + 1, current.skipFiller) }) {
                     onSentenceStart(book, it)
                 }
             }
@@ -316,15 +325,20 @@ class ReadAloudController(
     }
 
     private suspend fun utteranceAt(book: BookEntity, position: Position) =
-        utteranceAt(book, position.chapter, position.sentence)
+        utteranceAt(book, position.chapter, position.sentence, skipFiller = false)
 
-    private suspend fun utteranceAt(book: BookEntity, chapter: Int, sentence: Int): Utterance? =
+    /** The sentence at or after [chapter]/[sentence], passing over filler paragraphs when [skipFiller] is set. */
+    private suspend fun utteranceAt(book: BookEntity, chapter: Int, sentence: Int, skipFiller: Boolean): Utterance? =
         withContext(Dispatchers.Default) {
             var c = chapter
             var s = sentence
             while (c < book.chapterCount) {
                 val content = books.chapter(book, c)
-                if (s < content.sentences.size) return@withContext Utterance(c, s, content.sentences[s].text)
+                while (s < content.sentences.size) {
+                    val text = content.sentences[s]
+                    if (!skipFiller || content.paragraphs[text.paragraph].spoken) return@withContext Utterance(c, s, text.text)
+                    s++
+                }
                 c++
                 s = 0
             }

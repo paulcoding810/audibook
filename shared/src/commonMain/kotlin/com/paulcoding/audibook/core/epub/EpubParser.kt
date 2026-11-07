@@ -39,7 +39,8 @@ class EpubParser(file: File) : Closeable {
             paragraphs += Paragraph(block.text, block.isHeading, sentences.size, ranges.size, block.target)
             ranges.forEach { sentences += Sentence(block.text.substring(it), paragraphIndex, it) }
         }
-        return ChapterContent(ref.index, ref.title, paragraphs, sentences)
+        val filler = Filler.indices(paragraphs)
+        return ChapterContent(ref.index, ref.title, paragraphs.mapIndexed { i, p -> if (i in filler) p.copy(spoken = false) else p }, sentences)
     }
 
     private val chapterIndexByHref by lazy { book.chapters.associate { it.href to it.index } }

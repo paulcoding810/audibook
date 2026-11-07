@@ -27,6 +27,8 @@ data class Paragraph(
     val sentenceCount: Int,
     /** Chapter this paragraph links to when it's essentially one link, e.g. an entry on a contents page. */
     val target: Int? = null,
+    /** False for filler that reading aloud skips (see [Filler]). */
+    val spoken: Boolean = true,
 )
 
 data class ChapterContent(

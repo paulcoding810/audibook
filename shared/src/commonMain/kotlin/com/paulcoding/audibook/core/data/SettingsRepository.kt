@@ -22,6 +22,8 @@ data class TtsSettings(
     val sherpaSpeaker: Int = 0,
     val speed: Float = 1f,
     val pitch: Float = 1f,
+    /** Skip contents lists and Project Gutenberg license text when reading aloud. */
+    val skipFiller: Boolean = true,
 )
 
 data class SleepPrefs(
@@ -42,6 +44,7 @@ data class SettingsBackup(
     val sleepMinutes: Int = 30,
     val sleepAutoStart: Boolean = false,
     val sleepShakeToResume: Boolean = true,
+    val skipFiller: Boolean = true,
 )
 
 class SettingsRepository(private val store: DataStore<Preferences>) {
@@ -54,6 +57,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             sherpaSpeaker = prefs[SHERPA_SPEAKER] ?: 0,
             speed = prefs[SPEED] ?: 1f,
             pitch = prefs[PITCH] ?: 1f,
+            skipFiller = prefs[SKIP_FILLER] ?: true,
         )
     }.distinctUntilChanged()
 
@@ -73,6 +77,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setSpeed(speed: Float) = store.edit { it[SPEED] = speed }
 
     suspend fun setPitch(pitch: Float) = store.edit { it[PITCH] = pitch }
+
+    suspend fun setSkipFiller(enabled: Boolean) = store.edit { it[SKIP_FILLER] = enabled }
 
     val sleepPrefs: Flow<SleepPrefs> = store.data.map { prefs ->
         SleepPrefs(
@@ -101,6 +107,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             sleepMinutes = sleep.minutes,
             sleepAutoStart = sleep.autoStart,
             sleepShakeToResume = sleep.shakeToResume,
+            skipFiller = tts.skipFiller,
         )
     }
 
@@ -114,6 +121,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         it[SLEEP_MINUTES] = backup.sleepMinutes
         it[SLEEP_AUTO] = backup.sleepAutoStart
         it[SLEEP_SHAKE] = backup.sleepShakeToResume
+        it[SKIP_FILLER] = backup.skipFiller
     }
 
     private companion object {
@@ -126,5 +134,6 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val SLEEP_MINUTES = intPreferencesKey("sleep_minutes")
         val SLEEP_AUTO = booleanPreferencesKey("sleep_auto")
         val SLEEP_SHAKE = booleanPreferencesKey("sleep_shake")
+        val SKIP_FILLER = booleanPreferencesKey("skip_filler")
     }
 }

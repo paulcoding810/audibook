@@ -35,6 +35,8 @@ dependencies {
 
 tasks.withType<JavaExec>().configureEach {
     systemProperty("audibook.debug", "true")
+    // `./gradlew :desktop:run -Paudibook.dataDir=/tmp/x` runs against a separate library, e.g. for testing.
+    providers.gradleProperty("audibook.dataDir").orNull?.let { systemProperty("audibook.dataDir", it) }
 }
 
 compose.desktop {
@@ -47,6 +49,7 @@ compose.desktop {
             packageVersion = appVersion
             description = "Reads EPUB books aloud"
             modules("java.net.http", "java.sql", "jdk.unsupported")
+            fileAssociation(mimeType = "application/epub+zip", extension = "epub", description = "EPUB book")
         }
     }
 }

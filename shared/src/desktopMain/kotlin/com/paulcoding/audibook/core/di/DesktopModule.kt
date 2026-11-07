@@ -24,11 +24,13 @@ import okio.Path.Companion.toOkioPath
 import org.koin.dsl.module
 import java.io.File
 
-/** Per-user data folder: ~/Library/Application Support/AudiBook, %APPDATA%\AudiBook, or ~/.local/share/audibook. */
+/** Per-user data folder: ~/Library/Application Support/AudiBook, %APPDATA%\AudiBook, or ~/.local/share/audibook (or -Daudibook.dataDir). */
 fun desktopAppDirs(): AppDirs {
     val home = System.getProperty("user.home")
     val os = System.getProperty("os.name").lowercase()
+    val override = System.getProperty("audibook.dataDir")
     val files = when {
+        override != null -> File(override)
         os.contains("mac") -> File(home, "Library/Application Support/AudiBook")
         os.contains("win") -> File(System.getenv("APPDATA") ?: home, "AudiBook")
         else -> File(System.getenv("XDG_DATA_HOME") ?: "$home/.local/share", "audibook")

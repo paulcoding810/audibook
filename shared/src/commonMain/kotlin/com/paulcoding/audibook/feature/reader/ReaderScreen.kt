@@ -75,6 +75,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -119,6 +120,7 @@ fun ReaderScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val speed by viewModel.speed.collectAsStateWithLifecycle()
+    val skipFiller by viewModel.skipFiller.collectAsStateWithLifecycle()
     val openFailed by viewModel.openFailed.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var showToc by remember { mutableStateOf(false) }
@@ -211,6 +213,7 @@ fun ReaderScreen(
             ChapterText(
                 chapter = chapter,
                 state = state,
+                dimFiller = skipFiller,
                 onSentenceClick = { viewModel.seekTo(chapter.index, it) },
                 onOpenChapter = viewModel::seekTo,
                 onResume = viewModel::togglePlay,
@@ -259,6 +262,7 @@ fun ReaderScreen(
 private fun ChapterText(
     chapter: ChapterContent,
     state: PlaybackState,
+    dimFiller: Boolean,
     onSentenceClick: (Int) -> Unit,
     onOpenChapter: (chapter: Int, sentence: Int) -> Unit,
     onResume: () -> Unit,
@@ -328,6 +332,7 @@ private fun ChapterText(
                     paragraph,
                     chapter,
                     currentSentence,
+                    dim = dimFiller && !paragraph.spoken,
                     onSentenceClick = {
                         follow = true
                         onSentenceClick(it)
@@ -418,6 +423,7 @@ private fun ParagraphText(
     paragraph: Paragraph,
     chapter: ChapterContent,
     currentSentence: Int,
+    dim: Boolean,
     onSentenceClick: (Int) -> Unit,
     onOpenTarget: (chapter: Int) -> Unit,
 ) {
@@ -457,6 +463,8 @@ private fun ParagraphText(
     }
     Text(
         text,
+        // Filler that reading aloud skips is dimmed, so it's clear why playback jumps past it.
+        color = if (dim) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f) else Color.Unspecified,
         style = if (paragraph.isHeading) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge.copy(
             lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.15f,
         ),

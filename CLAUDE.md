@@ -8,7 +8,7 @@ Android and desktop (Compose Multiplatform) app that imports EPUBs and reads the
 ./gradlew :shared:desktopTest          # JVM unit tests (parser, splitter, WAV decoder, catalog, update logic)
 ./gradlew :app:assembleFossDebug
 ./gradlew :app:installFossDebug
-./gradlew :desktop:run                 # desktop app
+./gradlew :desktop:run                 # desktop app (-Paudibook.dataDir=/tmp/x for a separate library; --args=book.epub to open one)
 ./gradlew :desktop:packageDmg          # or packageMsi / packageDeb, on that OS
 ```
 
@@ -42,6 +42,8 @@ Android and desktop (Compose Multiplatform) app that imports EPUBs and reads the
 Compose Multiplatform + Koin, Media3 on Android. Package `com.paulcoding.audibook` (in `shared` unless noted):
 
 - `core/epub`: dependency-free EPUB parsing (`ZipFile` + Jsoup) into chapters → paragraphs → sentences. `SentenceSplitter` uses `java.text.BreakIterator`, not ICU, so it runs in JVM unit tests. Sentences are capped at 300 chars. A block that is essentially one link to another spine chapter (a contents entry) gets `Paragraph.target`; the reader renders it as a link that opens that chapter instead of seeking to its sentences. Fragments (`#id`) aren't resolved yet, so it opens the chapter's start.
+- `Filler` marks paragraphs reading aloud skips (`Paragraph.spoken = false`): Project Gutenberg's text before `*** START OF…` and from `*** END OF…`, and the contents block (3+ link entries, short lines between them, its heading). Playback reads the first sentence exactly where the user is and skips filler only after it; a never-read book opens at its first non-filler sentence. The reader dims filler. Setting: `TtsSettings.skipFiller` (default on, in backups).
+- EPUBs from outside (Android `VIEW`/`SEND` intents in `MainActivity`; desktop launch arguments, the macOS open-file event and the packaged `.epub` file association) go through `ExternalImports`; `AudiBookApp` imports each and opens it in the reader.
 - `core/data`: Room `books` table (reading progress is stored as columns on it), DataStore `TtsSettings`, and `BookRepository` (import, parser + chapter LRU cache).
 - `core/tts`: the `SpeechEngine` interface. Both engines render PCM ahead and play it through `playPipelined()` in `PcmPipeline.kt`.
   - `SystemTtsEngine` (`app`): Google TTS via `synthesizeToFile()`, then `WavReader`. `DesktopSystemTtsEngine` runs `say` (macOS), SAPI via PowerShell (Windows) or espeak-ng (Linux) to a WAV file.

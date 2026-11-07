@@ -119,6 +119,7 @@ class SettingsViewModel(
     fun setSpeaker(speaker: Int) = launch { settings.setSherpaSpeaker(speaker) }
     fun setSpeed(speed: Float) = launch { settings.setSpeed(speed) }
     fun setPitch(pitch: Float) = launch { settings.setPitch(pitch) }
+    fun setSkipFiller(enabled: Boolean) = launch { settings.setSkipFiller(enabled) }
 
     fun preview() {
         val language = controller.state.value.book?.language

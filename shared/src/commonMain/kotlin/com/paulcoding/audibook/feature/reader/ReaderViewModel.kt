@@ -21,6 +21,8 @@ class ReaderViewModel(
     val errors = controller.errors
     val speed = settings.settings.map { it.speed }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 1f)
+    val skipFiller = settings.settings.map { it.skipFiller }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val sleepPrefs = settings.sleepPrefs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SleepPrefs())
     val sleepAutoStarted = controller.sleepAutoStarted

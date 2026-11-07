@@ -2,6 +2,7 @@ package com.paulcoding.audibook.core.di
 
 import com.paulcoding.audibook.core.backup.BackupManager
 import com.paulcoding.audibook.core.data.BookRepository
+import com.paulcoding.audibook.core.data.ExternalImports
 import com.paulcoding.audibook.core.data.SettingsRepository
 import com.paulcoding.audibook.core.data.db.BookDatabase
 import com.paulcoding.audibook.core.network.di.networkModule
@@ -21,6 +22,7 @@ val sharedModules = listOf(
     module {
         single { get<BookDatabase>().bookDao() }
         singleOf(::BookRepository)
+        single { ExternalImports() }
         singleOf(::SettingsRepository)
         singleOf(::BackupManager)
         singleOf(::ModelManager)
