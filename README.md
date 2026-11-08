@@ -10,7 +10,7 @@ AudiBook is an Android app that turns your EPUB books into audiobooks. It reads 
 - **Import any EPUB** (EPUB 2 and 3): the cover, title, author and table of contents are picked up automatically.
 - **Read or listen in one screen**:
   - While playing, the text follows the current sentence.
-  - While paused, it's a plain reader. Tap any sentence to start reading aloud from there.
+  - While paused, it's a plain reader. Tap any sentence to move there, then press Play to listen from it.
 - **Seamless playback**: sentences are rendered ahead of time, so there are no gaps between sentences or chapters, even on slower phones.
 - **Two kinds of voices**:
   - **Google Text-to-Speech**: many languages. Offline voices are preferred automatically, with a fallback if an online voice fails.

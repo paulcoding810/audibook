@@ -38,7 +38,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -103,7 +102,7 @@ import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-private val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
+private val speeds = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
 private const val SLEEP_MIN = 5
 private const val SLEEP_MAX = 120
 private const val SLEEP_STEP = 5
@@ -177,7 +176,7 @@ fun ReaderScreen(
             )
         },
         bottomBar = {
-            if (ready && state.isPlaying) PlayerControls(
+            if (ready && !openFailed && state.chapter != null) PlayerControls(
                 state = state,
                 speed = speed,
                 onToggle = viewModel::togglePlay,
@@ -216,7 +215,6 @@ fun ReaderScreen(
                 dimFiller = skipFiller,
                 onSentenceClick = { viewModel.seekTo(chapter.index, it) },
                 onOpenChapter = viewModel::seekTo,
-                onResume = viewModel::togglePlay,
                 modifier = Modifier.padding(padding),
             )
         }
@@ -257,7 +255,7 @@ fun ReaderScreen(
     }
 }
 
-/** Shows the chapter; follows playback while playing, and acts as a plain reader while paused (tap a sentence to start there). */
+/** Shows the chapter; follows playback while playing, and acts as a plain reader while paused (tap a sentence to move there). */
 @Composable
 private fun ChapterText(
     chapter: ChapterContent,
@@ -265,7 +263,6 @@ private fun ChapterText(
     dimFiller: Boolean,
     onSentenceClick: (Int) -> Unit,
     onOpenChapter: (chapter: Int, sentence: Int) -> Unit,
-    onResume: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -303,7 +300,6 @@ private fun ChapterText(
     }
 
     val scrolledAway = !follow && currentParagraph >= 0 && !currentVisible
-    val paused = !state.isPlaying
 
     Box(modifier.fillMaxSize()) {
         LazyColumn(
@@ -312,7 +308,7 @@ private fun ChapterText(
                 start = 16.dp,
                 end = 16.dp,
                 top = 8.dp,
-                bottom = 16.dp + (if (paused) 72.dp else 0.dp) + (if (scrolledAway) 56.dp else 0.dp),
+                bottom = 16.dp + (if (scrolledAway) 56.dp else 0.dp),
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize().nestedScroll(userScroll),
@@ -375,11 +371,6 @@ private fun ChapterText(
                     scope.launch { listState.revealParagraph(currentParagraph) }
                 }) {
                     Icon(Icons.Default.MyLocation, contentDescription = "Go to current sentence")
-                }
-            }
-            if (paused) {
-                FloatingActionButton(onClick = onResume) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Play")
                 }
             }
         }
