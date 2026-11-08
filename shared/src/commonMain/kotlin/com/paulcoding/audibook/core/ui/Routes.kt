@@ -19,4 +19,8 @@ object Routes {
     @Serializable
     @Immutable
     object Models
+
+    @Serializable
+    @Immutable
+    object Licenses
 }

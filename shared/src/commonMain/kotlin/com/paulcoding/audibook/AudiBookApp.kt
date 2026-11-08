@@ -29,6 +29,7 @@ import com.paulcoding.audibook.core.data.ExternalImports
 import com.paulcoding.audibook.core.ui.Routes
 import com.paulcoding.audibook.feature.library.LibraryScreen
 import com.paulcoding.audibook.feature.reader.ReaderScreen
+import com.paulcoding.audibook.feature.settings.LicensesScreen
 import com.paulcoding.audibook.feature.settings.ModelsScreen
 import com.paulcoding.audibook.feature.settings.SettingsScreen
 import com.paulcoding.audibook.ui.theme.AudiBookTheme
@@ -99,10 +100,14 @@ fun MainNavigation(
             SettingsScreen(
                 onBack = navController::navigateUp,
                 onOpenModels = { navController.navigate(Routes.Models) },
+                onOpenLicenses = { navController.navigate(Routes.Licenses) },
             )
         }
         composable<Routes.Models> {
             ModelsScreen(onBack = navController::navigateUp)
+        }
+        composable<Routes.Licenses> {
+            LicensesScreen(onBack = navController::navigateUp)
         }
     }
 }

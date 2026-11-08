@@ -110,6 +110,14 @@ class ModelManager(dirs: AppDirs, private val client: HttpClient) {
     /** Changes whenever a model reports its speaker count on load, so screens can show speaker options right away. */
     val learnedSpeakers: StateFlow<Map<String, Int>> = _learnedSpeakers.asStateFlow()
 
+    /** The license or model card a voice ships with (LICENSE, MODEL_CARD or README), or null if it has none. */
+    fun licenseText(id: String): String? {
+        val files = dir(id).listFiles().orEmpty().filter { it.isFile }
+        return listOf("LICENSE", "MODEL_CARD", "README").firstNotNullOfOrNull { name ->
+            files.firstOrNull { it.name.startsWith(name, ignoreCase = true) }
+        }?.let { runCatching { it.readText() }.getOrNull() }
+    }
+
     fun rememberSpeakerCount(id: String, count: Int) {
         runCatching { File(dir(id), SPEAKERS).writeText(count.toString()) }
         _learnedSpeakers.update { it + (id to count) }

@@ -73,3 +73,9 @@ Release builds are signed when a `key.properties` file (`storeFile`, `storePassw
 ## Contributing
 
 Contributions are welcome! Please feel free to open an issue or submit a Pull Request.
+
+## License and privacy
+
+AudiBook is free software under the [GNU General Public License v3.0](LICENSE). Downloaded voices keep their own licenses, shown in Settings → Licenses.
+
+AudiBook has no accounts, analytics or ads. See the [privacy policy](PRIVACY.md).

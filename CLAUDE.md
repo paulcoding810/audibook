@@ -29,6 +29,7 @@ Android and desktop (Compose Multiplatform) app that imports EPUBs and reads the
 - ABI splits produce one APK per ABI (~40–55 MB release, mostly sherpa-onnx native libs) plus a universal APK (~140 MB). Install the matching one, e.g. `app/build/outputs/apk/foss/debug/app-foss-arm64-v8a-debug.apk`.
 - Release builds use R8 (`isMinifyEnabled` + `isShrinkResources`). sherpa-onnx's native code accesses its Kotlin config classes by name, and its AAR ships no rules, so `proguard-rules.pro` keeps `com.k2fsa.sherpa.onnx.**`. After dependency changes, smoke-test a release build: an AI voice, Google TTS, and an update check against a real release.
 - ABI splits are disabled automatically for `bundle*` tasks, because AGP 9 rejects ABI splits combined with resource shrinking when building an AAB, and Play splits by ABI itself.
+- Licensing: AudiBook is GPL-3.0 (`LICENSE`). When adding a dependency, add it to `libraries` in `feature/settings/LicensesScreen.kt`. Voice licenses are shown from each model folder's own `LICENSE` / `MODEL_CARD` / `README` (`ModelManager.licenseText`). `PRIVACY.md` is the Play privacy policy URL; update it when adding any network call or permission. Draft Play Console answers (FGS declaration, Data safety) are in `docs/play-store.md`.
 - Release signing reads `key.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) from the repo root; without it, release APKs are unsigned. Never commit `key.properties` or keystores.
 
 ## CI/CD (`.github/workflows`)

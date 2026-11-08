@@ -1,5 +1,6 @@
 package com.paulcoding.audibook.feature.settings
 
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.clickable
@@ -71,11 +72,14 @@ import java.time.LocalDate
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
+private const val PRIVACY_POLICY_URL = "https://github.com/paulcoding810/audibook/blob/main/PRIVACY.md"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenModels: () -> Unit,
+    onOpenLicenses: () -> Unit,
     viewModel: SettingsViewModel = koinViewModel(),
 ) {
     val settings by viewModel.state.collectAsStateWithLifecycle()
@@ -88,6 +92,7 @@ fun SettingsScreen(
     val exportBackup = rememberSaveFile(viewModel::exportBackup)
     val importBackup = rememberOpenFile(listOf("*/*"), listOf("audibook"), viewModel::importBackup)
     val appInfo = koinInject<AppInfo>()
+    val uriHandler = LocalUriHandler.current
 
     LaunchedEffect(Unit) {
         viewModel.errors.collect { snackbar.showSnackbar(it) }
@@ -221,6 +226,16 @@ fun SettingsScreen(
                     if (updateState == UpdateState.Checking) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 },
                 modifier = Modifier.clickable(enabled = updateState == UpdateState.Idle, onClick = viewModel::checkForUpdate),
+            )
+            ListItem(
+                headlineContent = { Text("Licenses") },
+                supportingContent = { Text("AudiBook is free software (GPL-3.0); libraries and voice licenses") },
+                modifier = Modifier.clickable(onClick = onOpenLicenses),
+            )
+            ListItem(
+                headlineContent = { Text("Privacy policy") },
+                supportingContent = { Text("No accounts, analytics or ads") },
+                modifier = Modifier.clickable { uriHandler.openUri(PRIVACY_POLICY_URL) },
             )
         }
     }
