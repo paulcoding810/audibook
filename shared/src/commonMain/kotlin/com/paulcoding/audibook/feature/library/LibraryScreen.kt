@@ -188,7 +188,7 @@ private fun EmptyLibrary(modifier: Modifier = Modifier) {
 private fun BookCard(book: BookEntity, missingFile: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     Column(
         Modifier
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Remove from library")
             .alpha(if (missingFile) 0.6f else 1f)
     ) {
         Box(
@@ -202,7 +202,8 @@ private fun BookCard(book: BookEntity, missingFile: Boolean, onClick: () -> Unit
             if (book.coverPath != null && File(book.coverPath).exists()) {
                 AsyncImage(
                     model = File(book.coverPath),
-                    contentDescription = book.title,
+                    // The title is shown under the cover; naming it here too makes screen readers say it twice.
+                    contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )

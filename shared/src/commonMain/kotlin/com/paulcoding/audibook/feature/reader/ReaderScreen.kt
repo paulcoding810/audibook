@@ -1,5 +1,7 @@
 package com.paulcoding.audibook.feature.reader
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -127,6 +129,14 @@ fun ReaderScreen(
     var showSleep by remember { mutableStateOf(false) }
     val sleepPrefs by viewModel.sleepPrefs.collectAsStateWithLifecycle()
     val ready = state.book?.id == bookId
+    val sleepMinutesLeft by produceState(state.sleepTimerEndsAt?.let(::minutesUntil), state.sleepTimerEndsAt) {
+        val endsAt = state.sleepTimerEndsAt
+        while (endsAt != null) {
+            value = minutesUntil(endsAt)
+            delay(30_000)
+        }
+        value = null
+    }
     val topBarScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     LaunchedEffect(Unit) {
@@ -168,7 +178,7 @@ fun ReaderScreen(
                     IconButton(onClick = { showSleep = true }) {
                         Icon(
                             Icons.Default.Bedtime,
-                            contentDescription = "Sleep timer",
+                            contentDescription = sleepMinutesLeft?.let { "Sleep timer, ${formatMinutes(it)} left" } ?: "Sleep timer, off",
                             tint = if (state.sleepTimerEndsAt != null) MaterialTheme.colorScheme.primary else LocalContentColor.current,
                         )
                     }
@@ -461,6 +471,7 @@ private fun ParagraphText(
     }
     Text(
         text,
+        modifier = if (paragraph.isHeading) Modifier.semantics { heading() } else Modifier,
         // Filler that reading aloud skips is dimmed, so it's clear why playback jumps past it.
         color = if (dim) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f) else Color.Unspecified,
         style = if (paragraph.isHeading) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge.copy(

@@ -1,5 +1,7 @@
 package com.paulcoding.audibook.feature.settings
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -144,7 +146,7 @@ fun ModelsScreen(onBack: () -> Unit, viewModel: ModelsViewModel = koinViewModel(
                         section.title,
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp).semantics { heading() },
                     )
                 }
                 items(section.models, key = { "${section.title}:${it.id}" }) { model ->
