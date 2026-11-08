@@ -135,8 +135,10 @@ fun SettingsScreen(
             EngineOption(
                 selected = current.engine == EngineType.SHERPA,
                 title = "On-device AI voices",
-                description = "Neural voices that run fully offline. Download a voice model first.",
-                onClick = { viewModel.setEngine(EngineType.SHERPA) },
+                description = if (installed.isEmpty()) "Neural voices that run fully offline. Tap to download your first voice."
+                else "Neural voices that run fully offline.",
+                // With no voice installed yet there's nothing to switch to, so go pick one instead of failing at Play.
+                onClick = { if (installed.isEmpty()) onOpenModels() else viewModel.setEngine(EngineType.SHERPA) },
             )
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
