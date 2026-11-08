@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.paulcoding.audibook.core.data.SettingsRepository
 import com.paulcoding.audibook.core.data.SleepPrefs
+import com.paulcoding.audibook.core.playback.OpenFailure
 import com.paulcoding.audibook.core.playback.ReadAloudController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,11 +28,11 @@ class ReaderViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SleepPrefs())
     val sleepAutoStarted = controller.sleepAutoStarted
 
-    private val _openFailed = MutableStateFlow(false)
-    val openFailed = _openFailed.asStateFlow()
+    private val _openFailure = MutableStateFlow<OpenFailure?>(null)
+    val openFailure = _openFailure.asStateFlow()
 
     init {
-        viewModelScope.launch { _openFailed.value = !controller.open(bookId) }
+        viewModelScope.launch { _openFailure.value = controller.open(bookId) }
     }
 
     fun togglePlay() = controller.togglePlay()

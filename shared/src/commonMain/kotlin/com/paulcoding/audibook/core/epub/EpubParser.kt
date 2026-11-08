@@ -18,6 +18,17 @@ class EpubParser(file: File) : Closeable {
 
     val book: EpubBook by lazy { parseBook() }
 
+    /** True when the text is encrypted (DRM such as Adobe ADEPT), not merely its fonts obfuscated. */
+    val isDrmProtected: Boolean by lazy {
+        if (zip.getEntry("META-INF/rights.xml") != null) return@lazy true
+        val encryption = readXml("META-INF/encryption.xml") ?: return@lazy false
+        fun local(element: Element) = element.tagName().substringAfter(':')
+        encryption.allElements.filter { local(it) == "EncryptedData" }.any { data ->
+            val method = data.allElements.firstOrNull { local(it) == "EncryptionMethod" }
+            method?.attr("Algorithm") !in fontObfuscation
+        }
+    }
+
     fun readBytes(href: String): ByteArray? =
         zip.getEntry(href)?.let { entry -> zip.getInputStream(entry).use { it.readBytes() } }
 
@@ -139,6 +150,7 @@ class EpubParser(file: File) : Closeable {
         private val headingTags = setOf("h1", "h2", "h3", "h4", "h5", "h6")
         private val skipTags = setOf("script", "style", "head", "title", "svg", "math", "rt", "rp")
         private val whitespace = Regex("[\\s\\u00A0\\u200B]+")
+        private val fontObfuscation = setOf("http://www.idpf.org/2008/embedding", "http://ns.adobe.com/pdf/enc#RC")
         private val urlScheme = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:")
 
         fun resolve(baseDir: String, href: String): String {

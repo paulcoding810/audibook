@@ -3,6 +3,7 @@ package com.paulcoding.audibook.core.data
 import com.paulcoding.audibook.core.data.db.BookDao
 import com.paulcoding.audibook.core.data.db.BookEntity
 import com.paulcoding.audibook.core.epub.ChapterContent
+import com.paulcoding.audibook.core.epub.DrmProtectedException
 import com.paulcoding.audibook.core.epub.EpubParser
 import com.paulcoding.audibook.core.platform.AppDirs
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +92,7 @@ class BookRepository(
         source.copyTo(target, overwrite = true)
         try {
             EpubParser(target).use { parser ->
+                if (parser.isDrmProtected) throw DrmProtectedException()
                 val epub = parser.book
                 require(epub.chapters.isNotEmpty()) { "This EPUB has no readable chapters" }
                 val cover = epub.coverHref?.let { href ->
@@ -172,6 +174,8 @@ class BookRepository(
         dao.updateProgress(id, chapter, sentence, System.currentTimeMillis())
 
     suspend fun chapters(book: BookEntity) = parser(book).book.chapters
+
+    suspend fun isDrmProtected(book: BookEntity) = parser(book).isDrmProtected
 
     suspend fun chapter(book: BookEntity, index: Int): ChapterContent {
         val key = "${book.id}:$index"

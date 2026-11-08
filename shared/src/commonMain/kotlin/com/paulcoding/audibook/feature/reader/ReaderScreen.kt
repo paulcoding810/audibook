@@ -91,6 +91,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paulcoding.audibook.core.platform.AppInfo
+import com.paulcoding.audibook.core.playback.OpenFailure
 import com.paulcoding.audibook.core.data.SleepPrefs
 import com.paulcoding.audibook.core.epub.ChapterContent
 import com.paulcoding.audibook.core.epub.Paragraph
@@ -120,7 +121,7 @@ fun ReaderScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val speed by viewModel.speed.collectAsStateWithLifecycle()
     val skipFiller by viewModel.skipFiller.collectAsStateWithLifecycle()
-    val openFailed by viewModel.openFailed.collectAsStateWithLifecycle()
+    val openFailure by viewModel.openFailure.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var showToc by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
@@ -176,7 +177,7 @@ fun ReaderScreen(
             )
         },
         bottomBar = {
-            if (ready && !openFailed && state.chapter != null) PlayerControls(
+            if (ready && openFailure == null && state.chapter != null) PlayerControls(
                 state = state,
                 speed = speed,
                 onToggle = viewModel::togglePlay,
@@ -190,7 +191,8 @@ fun ReaderScreen(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         val chapter = state.chapter
-        if (openFailed) {
+        val failure = openFailure
+        if (failure != null) {
             Column(
                 Modifier.padding(padding).fillMaxSize().padding(32.dp),
                 verticalArrangement = Arrangement.Center,
@@ -198,7 +200,12 @@ fun ReaderScreen(
             ) {
                 Text("This book can't be opened", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Its EPUB file isn't on this device. Re-add it from the library to continue.",
+                    when (failure) {
+                        OpenFailure.NotInLibrary -> "It's no longer in your library."
+                        OpenFailure.MissingFile -> "Its EPUB file isn't on this device. Re-add it from the library to continue."
+                        OpenFailure.DrmProtected -> "It's DRM-protected. AudiBook can only read DRM-free EPUBs."
+                        is OpenFailure.Unreadable -> "AudiBook couldn't read this EPUB: ${failure.reason}"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

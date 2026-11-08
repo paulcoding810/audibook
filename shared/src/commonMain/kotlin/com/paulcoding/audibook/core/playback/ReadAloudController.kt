@@ -35,6 +35,15 @@ import kotlinx.coroutines.withContext
 
 data class Position(val chapter: Int = 0, val sentence: Int = 0)
 
+/** Why [ReadAloudController.open] couldn't open a book. */
+sealed interface OpenFailure {
+    data object NotInLibrary : OpenFailure
+    /** Its EPUB isn't on this device, e.g. after restoring a backup without books. */
+    data object MissingFile : OpenFailure
+    data object DrmProtected : OpenFailure
+    data class Unreadable(val reason: String) : OpenFailure
+}
+
 data class PlaybackState(
     val book: BookEntity? = null,
     val chapters: List<ChapterRef> = emptyList(),
@@ -88,21 +97,27 @@ class ReadAloudController(
         }
     }
 
-    /** Loads [bookId] for reading; returns false if it can't be opened (e.g. its EPUB is missing after a restore). */
-    suspend fun open(bookId: String): Boolean {
-        if (_state.value.book?.id == bookId) return true
-        val book = books.getBook(bookId) ?: return false
-        if (!book.hasFile) return false
+    /** Loads [bookId] for reading; returns why it couldn't, or null once it's open. */
+    suspend fun open(bookId: String): OpenFailure? {
+        if (_state.value.book?.id == bookId) return null
+        val book = books.getBook(bookId) ?: return OpenFailure.NotInLibrary
+        if (!book.hasFile) return OpenFailure.MissingFile
         pause(byUser = false)
         stopShakeWindow()
-        val chapters = try {
-            books.chapters(book)
+        val chapters: List<ChapterRef>
+        var content: ChapterContent
+        var chapterIndex: Int
+        try {
+            if (books.isDrmProtected(book)) return OpenFailure.DrmProtected
+            chapters = books.chapters(book)
+            if (chapters.isEmpty()) return OpenFailure.Unreadable("it has no readable chapters")
+            chapterIndex = book.chapterIndex.coerceIn(0, chapters.lastIndex)
+            content = books.chapter(book, chapterIndex)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            _errors.tryEmit("Couldn't open this book: ${e.message}")
-            return false
+            return OpenFailure.Unreadable(e.message ?: "unknown error")
         }
-        var chapterIndex = book.chapterIndex.coerceIn(0, chapters.lastIndex)
-        var content = books.chapter(book, chapterIndex)
         while (content.sentences.isEmpty() && chapterIndex < chapters.lastIndex) {
             content = books.chapter(book, ++chapterIndex)
         }
@@ -116,7 +131,7 @@ class ReadAloudController(
             }
         }
         _state.value = PlaybackState(book, chapters, content, Position(chapterIndex, sentence))
-        return true
+        return null
     }
 
     fun close(bookId: String) {

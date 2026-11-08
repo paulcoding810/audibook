@@ -16,7 +16,7 @@ class EpubParserTest {
     val temp = TemporaryFolder()
 
     private fun epub(files: Map<String, String>, binary: Map<String, ByteArray> = emptyMap()): File {
-        val file = temp.newFile("book.epub")
+        val file = temp.newFile()
         ZipOutputStream(file.outputStream()).use { zip ->
             zip.putNextEntry(ZipEntry("mimetype"))
             zip.write("application/epub+zip".toByteArray())
@@ -224,6 +224,44 @@ class EpubParserTest {
                 toc.paragraphs.map { it.text to it.target },
             )
         }
+    }
+
+    private fun encryption(algorithm: String, uri: String) = """
+        <?xml version="1.0"?>
+        <encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+          <enc:EncryptedData>
+            <enc:EncryptionMethod Algorithm="$algorithm"/>
+            <enc:CipherData><enc:CipherReference URI="$uri"/></enc:CipherData>
+          </enc:EncryptedData>
+        </encryption>
+    """.trimIndent()
+
+    private fun bookWith(extra: Map<String, String>): File {
+        val base = mapOf(
+            "META-INF/container.xml" to container,
+            "OEBPS/content.opf" to """
+                <?xml version="1.0"?>
+                <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+                  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Locked</dc:title></metadata>
+                  <manifest><item id="c1" href="ch1.xhtml" media-type="application/xhtml+xml"/></manifest>
+                  <spine><itemref idref="c1"/></spine>
+                </package>
+            """.trimIndent(),
+            "OEBPS/ch1.xhtml" to xhtml("<p>Text.</p>"),
+        )
+        return epub(base + extra)
+    }
+
+    @Test
+    fun detectsDrmButNotFontObfuscation() {
+        EpubParser(bookWith(emptyMap())).use { assertFalse(it.isDrmProtected) }
+        EpubParser(bookWith(mapOf("META-INF/encryption.xml" to encryption("http://www.idpf.org/2008/embedding", "OEBPS/fonts/a.otf")))).use {
+            assertFalse(it.isDrmProtected)
+        }
+        EpubParser(bookWith(mapOf("META-INF/encryption.xml" to encryption("http://www.w3.org/2001/04/xmlenc#aes128-cbc", "OEBPS/ch1.xhtml")))).use {
+            assertTrue(it.isDrmProtected)
+        }
+        EpubParser(bookWith(mapOf("META-INF/rights.xml" to "<rights/>"))).use { assertTrue(it.isDrmProtected) }
     }
 
     @Test
