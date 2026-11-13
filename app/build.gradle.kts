@@ -41,7 +41,7 @@ android {
         applicationId = "com.paulcoding.audibook"
         minSdk = 26
         targetSdk = 36
-        versionName = "1.1.0"
+        versionName = "1.1.1"
         versionCode = versionCodeOf(versionName!!)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
