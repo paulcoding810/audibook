@@ -35,8 +35,11 @@ Android and desktop (Compose Multiplatform) app that imports EPUBs and reads the
 ## CI/CD (`.github/workflows`)
 
 - `dev.yml`: on push/PR to `main`, runs unit tests and uploads the universal debug APK.
-- `release.yml`: on a `v*.*` tag, builds signed per-ABI foss APKs and creates a draft GitHub release. Needs the repo secrets `KEY_PROPERTIES` (file contents, with `storeFile=release.keystore`) and `RELEASE_KEYSTORE_BASE64` (`base64 -i release.keystore`).
-- `publish-playstore.yml`: manual run; builds the gplay release AAB and uploads it as a draft to the chosen Play track (internal/alpha/beta/production). Also needs `PLAY_STORE_JSON_KEY` (service account JSON). Bump `versionCode` in `app/build.gradle.kts` before each upload; Play rejects reused codes.
+- `release.yml` builds once and ships the same binaries:
+  - `build` (on a `v*.*` tag): checks the tag matches `versionName`, runs the tests, builds signed per-ABI foss APKs into a draft GitHub release, and uploads the gplay AAB to Play's **internal** track with fastlane. Secrets: `KEY_PROPERTIES` (file contents, with `storeFile=release.keystore`), `RELEASE_KEYSTORE_BASE64` (`base64 -i release.keystore`) and `PLAY_STORE_JSON_KEY` (service account JSON; without it the Play steps skip with a warning).
+  - `promote` (when you publish that GitHub release, skipping pre-releases): promotes the same versionCode from internal to the `PLAY_TRACK` repository variable (default `alpha`), at `PLAY_ROLLOUT` (default `1`; below 1 = staged rollout). A manual run from a tag promotes again with a chosen track and rollout.
+  - Play's API only accepts drafts until the app's first release is live: before that, upload the first AAB by hand in Play Console and set `PLAY_UPLOAD_STATUS=draft`. New personal accounts must run closed testing (12+ testers, 14 days) before production, hence the `alpha` default.
+  - Publish releases by hand: GitHub doesn't trigger workflows for releases published with a workflow's `GITHUB_TOKEN`.
 
 ## Architecture
 
@@ -89,6 +92,6 @@ Compose Multiplatform + Koin, Media3 on Android. Package `com.paulcoding.audiboo
 
 ## Releasing
 
-- Bump `versionName` and `versionCode` in `app/build.gradle.kts`, then tag `v<versionName>`. `release.yml` fails if the tag doesn't match `versionName`; otherwise the updater would keep offering the same version.
-- `release.yml` creates a **draft** release, so publish it. GitHub's `/releases/latest`, which the updater uses, ignores drafts and pre-releases.
+- Bump `versionName` (MAJOR.MINOR.PATCH, minor and patch below 100) in `app/build.gradle.kts`, then tag `v<versionName>`. `versionCode` is derived from it (1.2.3 → 10203, `versionCodeOf`); `release.yml`'s promote job computes the same number, so change both together. `release.yml` fails if the tag doesn't match `versionName`; otherwise the updater would keep offering the same version.
+- `release.yml` creates a **draft** release and puts the AAB on Play's internal track. Check that build from Play's internal test link, then publish the GitHub release: that makes it visible to the updater (`/releases/latest` ignores drafts and pre-releases) and promotes the same build on Play.
 - Keep APK asset names ending in `-<abi>.apk` (or `-<abi>-release.apk`). `pickApk()` in `core/update/UpdateLogic.kt` picks the asset for the device's CPU type that way.

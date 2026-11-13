@@ -1,24 +1,48 @@
 name: Build & Release
 
+# Build once, ship the same binaries:
+# 1. Push a vX.Y.Z tag → tests, foss APKs in a draft GitHub release, gplay AAB to Play's internal track.
+# 2. Check the internal build on a phone, then publish the GitHub release → that same Play build is
+#    promoted from internal to PLAY_TRACK (no rebuild).
+
 on:
-  workflow_dispatch:
   push:
     tags:
       - 'v*.*'
+  release:
+    types: [published]
+  # Promote again by hand: run from the release's tag with a different track or rollout.
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Promote the internal build to"
+        required: true
+        default: "alpha"
+        type: choice
+        options:
+          - alpha
+          - beta
+          - production
+      rollout:
+        description: "Share of users (0.01–1); below 1 is a staged rollout"
+        required: true
+        default: "1"
+
+env:
+  JAVA_VERSION: '21'
+  PACKAGE_NAME: com.paulcoding.audibook
 
 jobs:
   build:
+    name: Build, GitHub draft, Play internal
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-
-    env:
-      JAVA_VERSION: '21'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Check tag matches versionName
-        if: startsWith(github.ref, 'refs/tags/')
         run: |
           version=$(sed -nE 's/^ *versionName = "([^"]+)".*/\1/p' app/build.gradle.kts)
           if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
@@ -27,6 +51,7 @@ jobs:
           fi
 
       - name: Restore signing files
+        id: secrets
         run: |
           if [ -z "$KEY_PROPERTIES" ] || [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
             echo "::error::Set the KEY_PROPERTIES and RELEASE_KEYSTORE_BASE64 repository secrets"
@@ -35,9 +60,17 @@ jobs:
           echo "$KEY_PROPERTIES" > key.properties
           chmod 600 key.properties
           echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
+          if [ -n "$PLAY_STORE_JSON_KEY" ]; then
+            echo "$PLAY_STORE_JSON_KEY" > play-store-key.json
+            echo "play=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::PLAY_STORE_JSON_KEY isn't set; skipping the Play upload"
+            echo "play=false" >> "$GITHUB_OUTPUT"
+          fi
         env:
           KEY_PROPERTIES: ${{ secrets.KEY_PROPERTIES }}
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -54,10 +87,14 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run tests
-        run: ./gradlew :shared:desktopTest testFossDebugUnitTest
+        run: ./gradlew :shared:desktopTest testFossDebugUnitTest testGplayDebugUnitTest
 
-      - name: Build app
+      # Separate invocations: any bundle task in the same run turns ABI splits off for the APKs too.
+      - name: Build foss APKs
         run: ./gradlew assembleFossRelease
+
+      - name: Build gplay AAB
+        run: ./gradlew bundleGplayRelease
 
       - name: Rename apks
         run: |
@@ -67,6 +104,12 @@ jobs:
             mv "$apk" "AudiBook-${GITHUB_REF_NAME}-${abi}.apk"
           done
 
+      - name: Keep the AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: AudiBook-${{ github.ref_name }}.aab
+          path: app/build/outputs/bundle/gplayRelease/*.aab
+
       - name: Create changelog
         id: changelog
         uses: requarks/changelog-action@v1
@@ -75,7 +118,7 @@ jobs:
           token: ${{ github.token }}
           tag: ${{ github.ref_name }}
 
-      - name: Create release
+      - name: Create draft release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
@@ -83,3 +126,99 @@ jobs:
           files: app/build/outputs/apk/foss/release/*.apk
           fail_on_unmatched_files: true
           make_latest: true
+
+      - name: Set up Ruby
+        if: steps.secrets.outputs.play == 'true'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      # Before the app's first release is live in Play Console, Play accepts only drafts:
+      # set the PLAY_UPLOAD_STATUS repository variable to "draft" until then.
+      - name: Upload to Play internal testing
+        if: steps.secrets.outputs.play == 'true'
+        run: |
+          gem install fastlane --no-document
+          fastlane supply \
+            --package_name "$PACKAGE_NAME" \
+            --json_key play-store-key.json \
+            --aab "$(ls app/build/outputs/bundle/gplayRelease/*.aab)" \
+            --track internal \
+            --release_status "${PLAY_UPLOAD_STATUS:-completed}" \
+            --skip_upload_metadata true \
+            --skip_upload_changelogs true \
+            --skip_upload_images true \
+            --skip_upload_screenshots true
+        env:
+          PLAY_UPLOAD_STATUS: ${{ vars.PLAY_UPLOAD_STATUS }}
+
+  promote:
+    name: Promote on Play
+    if: (github.event_name == 'release' && !github.event.release.prerelease) || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Work out version and target
+        id: plan
+        run: |
+          if [ -z "$PLAY_STORE_JSON_KEY" ]; then
+            echo "::warning::PLAY_STORE_JSON_KEY isn't set; nothing to promote"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::Run this from a release tag (vX.Y.Z), not $GITHUB_REF_NAME"
+            exit 1
+          fi
+          # Same formula as versionCodeOf() in app/build.gradle.kts.
+          IFS=. read -r major minor patch <<< "${GITHUB_REF_NAME#v}"
+          if ! [[ "$major$minor$patch" =~ ^[0-9]+$ ]] || [ -z "$patch" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME isn't vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          echo "code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))" >> "$GITHUB_OUTPUT"
+          echo "track=${INPUT_TRACK:-${PLAY_TRACK:-alpha}}" >> "$GITHUB_OUTPUT"
+          echo "rollout=${INPUT_ROLLOUT:-${PLAY_ROLLOUT:-1}}" >> "$GITHUB_OUTPUT"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        env:
+          PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
+          INPUT_TRACK: ${{ github.event.inputs.track }}
+          INPUT_ROLLOUT: ${{ github.event.inputs.rollout }}
+          PLAY_TRACK: ${{ vars.PLAY_TRACK }}
+          PLAY_ROLLOUT: ${{ vars.PLAY_ROLLOUT }}
+
+      - name: Set up Ruby
+        if: steps.plan.outputs.ready == 'true'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Promote internal build
+        if: steps.plan.outputs.ready == 'true'
+        run: |
+          echo "$PLAY_STORE_JSON_KEY" > play-store-key.json
+          gem install fastlane --no-document
+          if awk "BEGIN { exit !($ROLLOUT < 1) }"; then
+            status=(--track_promote_release_status inProgress --rollout "$ROLLOUT")
+          else
+            status=(--track_promote_release_status completed)
+          fi
+          echo "Promoting versionCode $CODE from internal to $TRACK (rollout $ROLLOUT)"
+          fastlane supply \
+            --package_name "$PACKAGE_NAME" \
+            --json_key play-store-key.json \
+            --track internal \
+            --track_promote_to "$TRACK" \
+            --version_code "$CODE" \
+            "${status[@]}" \
+            --skip_upload_apk true \
+            --skip_upload_aab true \
+            --skip_upload_metadata true \
+            --skip_upload_changelogs true \
+            --skip_upload_images true \
+            --skip_upload_screenshots true
+        env:
+          PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
+          CODE: ${{ steps.plan.outputs.code }}
+          TRACK: ${{ steps.plan.outputs.track }}
+          ROLLOUT: ${{ steps.plan.outputs.rollout }}

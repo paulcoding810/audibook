@@ -66,9 +66,9 @@ Release builds are signed when a `key.properties` file (`storeFile`, `storePassw
 
 ### Releasing
 
-1. Bump `versionName` and `versionCode` in `app/build.gradle.kts`.
-2. Tag `v<versionName>` and push. CI builds signed APKs and creates a draft release.
-3. Publish the draft. The in-app updater only sees published releases.
+1. Bump `versionName` in `app/build.gradle.kts` (`versionCode` follows automatically).
+2. Tag `v<versionName>` and push. CI builds signed APKs into a draft GitHub release and uploads the Play build to internal testing.
+3. Check the internal Play build, then publish the GitHub release. That releases it to GitHub users (the in-app updater only sees published releases) and promotes the same build on Google Play.
 
 ## Contributing
 

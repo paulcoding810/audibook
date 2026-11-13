@@ -6,6 +6,16 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+/**
+ * versionCode derived from versionName, so a release can't reuse one: 1.2.3 → 10203.
+ * release.yml computes the same value to promote that build on Play; keep the two in sync.
+ */
+fun versionCodeOf(name: String): Int {
+    val parts = name.split('.').map { it.toIntOrNull() ?: error("versionName must be MAJOR.MINOR.PATCH, got $name") }
+    require(parts.size == 3 && parts[1] < 100 && parts[2] < 100) { "versionName must be MAJOR.MINOR.PATCH with MINOR and PATCH below 100, got $name" }
+    return parts[0] * 10_000 + parts[1] * 100 + parts[2]
+}
+
 val keystoreProperties = Properties().apply {
     rootProject.file("key.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }
@@ -31,8 +41,8 @@ android {
         applicationId = "com.paulcoding.audibook"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
         versionName = "1.1.0"
+        versionCode = versionCodeOf(versionName!!)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
